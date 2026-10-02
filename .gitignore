@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-electron/
+.npm-cache/
+.electron-cache/
+.electron-data/
+.chrome-qa/
+artifacts/

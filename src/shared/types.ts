@@ -1,0 +1,91 @@
+export interface FileNode {
+  name: string;
+  path: string;
+  directory: boolean;
+  children?: FileNode[];
+}
+
+export interface WorkspaceSnapshot {
+  root: string;
+  name: string;
+  nodes: FileNode[];
+  fileCount: number;
+  truncated: boolean;
+}
+
+export interface FilePreview {
+  path: string;
+  content: string;
+  size: number;
+  lines: number;
+}
+
+export interface AgentApprovalRequest {
+  id: string;
+  runId: string;
+  tool: string;
+  path: string;
+  before: string | null;
+  after: string;
+  diff?: string;
+  details?: string;
+}
+
+export type ApprovalDecision = 'once' | 'always' | 'deny';
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  reasoning?: string;
+  tools?: { id: string; name: string; path: string; description: string; success?: boolean; content?: string; diff?: string }[];
+  error?: boolean;
+}
+export interface ChatRecord {
+  id: string;
+  title: string;
+  workspaceRoot: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+export interface ChatSummary { id: string; title: string; workspaceRoot: string; updatedAt: string }
+
+export type AgentEvent =
+  | { runId: string; type: 'delta'; text: string }
+  | { runId: string; type: 'reasoning'; text: string }
+  | { runId: string; type: 'tool-start'; id: string; name: string; path: string; description: string }
+  | { runId: string; type: 'tool-result'; id: string; success: boolean; content: string; diff?: string }
+  | { runId: string; type: 'file-changed'; path: string; deleted?: boolean; directory?: boolean }
+  | { runId: string; type: 'done' }
+  | { runId: string; type: 'error'; message: string };
+
+export interface AgentRequest {
+  runId: string;
+  prompt: string;
+  provider: 'local' | 'openai';
+  model: string;
+  selectedFile?: string;
+  history?: { role: 'user' | 'assistant'; content: string }[];
+}
+
+export interface DesktopApi {
+  openWorkspace(): Promise<WorkspaceSnapshot | null>;
+  refreshWorkspace(): Promise<WorkspaceSnapshot>;
+  readFile(path: string): Promise<FilePreview>;
+  saveFile(path: string, content: string, expectedContent: string): Promise<FilePreview>;
+  createEntry(path: string, directory: boolean): Promise<WorkspaceSnapshot>;
+  confirmDiscard(): Promise<boolean>;
+  reportDirty(paths: string[]): Promise<void>;
+  startAgent(request: AgentRequest): Promise<void>;
+  stopAgent(runId: string): Promise<void>;
+  onAgentEvent(listener: (event: AgentEvent) => void): () => void;
+  onApprovalRequest(listener: (request: AgentApprovalRequest) => void): () => void;
+  respondApproval(id: string, decision: ApprovalDecision): Promise<void>;
+  listAllowedActions(): Promise<string[]>;
+  revokeAllowedAction(tool: string): Promise<string[]>;
+  listChats(): Promise<ChatSummary[]>;
+  getChat(id: string): Promise<ChatRecord | null>;
+  saveChat(chat: ChatRecord): Promise<void>;
+  deleteChat(id: string): Promise<void>;
+  onMenuCommand(listener: (command: string) => void): () => void;
+  getEnvironment(): Promise<{ hasOpenAIKey: boolean; defaultModel: string }>;
+}
