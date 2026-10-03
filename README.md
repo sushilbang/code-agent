@@ -15,7 +15,9 @@ Use the native **File** menu to open a folder, create a file or folder, save, or
 
 The agent pane shows detailed, expandable tool activity. When the model returns an optional reasoning summary, it appears in a collapsible section. Raw model reasoning is not available through the API.
 
-For OpenAI responses, set the key in the same terminal before starting:
+For OpenAI responses, select **OpenAI** and use the key button in the agent header. The key is sent through Electron's isolated IPC to the main process, encrypted with Electron `safeStorage` (the operating system's credential protection), and saved in the app user-data directory. Only key availability is returned to the renderer; the plaintext key is never stored in chat history or browser storage. A saved key takes precedence over `OPENAI_API_KEY`.
+
+You can alternatively set a key in the same terminal before starting:
 
 ```powershell
 $secureKey = Read-Host "OpenAI API key" -AsSecureString
@@ -24,7 +26,7 @@ $env:OPENAI_MODEL = "gpt-5.4"
 npm.cmd start
 ```
 
-The OpenAI agent can inspect files, edit them, create files or folders, and delete files or folders. Mutating actions are reviewed inline in the chat with **Reject**, **Allow once**, and **Always allow**. File changes show a contextual unified diff during review and retain it in the chat after the action succeeds, including for always-allowed actions. Always-allow applies to that action in the current folder and can be revoked from the gear icon in the agent pane. Unsaved editor changes are protected, and deleted folders are limited to 200 entries and 10 MB. Approved changes refresh the explorer and editor. Responses stream with Markdown and code-block formatting. Local inspection works without an API key. The key stays in the main process.
+The OpenAI agent can inspect files, edit them, create files or folders, and delete files or folders. Mutating actions are reviewed inline in the chat with **Reject**, **Allow once**, and **Always allow**. File changes show a contextual unified diff during review and retain it in the chat after the action succeeds, including for always-allowed actions. Always-allow applies to that action in the current folder and can be revoked from the gear icon in the agent pane. Unsaved editor changes are protected, and deleted folders are limited to 200 entries and 10 MB. Approved changes refresh the explorer and editor. Responses stream with Markdown and code-block formatting. Local inspection works without an API key. Model requests and secrets stay in the main process.
 
 Chats are saved locally in Electron's user-data directory as `chats.json` (on Windows, normally `%APPDATA%\code-agent\chats.json`). Allowed actions are stored beside it in `permissions.json`. Use the clock icon to open recent chats. Each chat remembers its folder, but opening a chat does not automatically open or switch folders; select the matching folder to continue the conversation. The root `example.ts` test fixture was removed; tests use temporary workspaces.
 

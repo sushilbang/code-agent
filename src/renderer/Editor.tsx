@@ -33,8 +33,20 @@ export default function Editor({ tabs, activePath, onChange }: { tabs: EditorTab
 
   useEffect(() => {
     if (!element.current) return;
+    monaco.editor.defineTheme('code-agent-black', {
+      base: 'vs-dark', inherit: true, rules: [],
+      colors: {
+        'editor.background': '#000000',
+        'editorGutter.background': '#000000',
+        'editor.lineHighlightBackground': '#090909',
+        'editorLineNumber.foreground': '#555555',
+        'editorLineNumber.activeForeground': '#aaaaaa',
+        'editorCursor.foreground': '#d8eee8',
+        'editor.selectionBackground': '#21443d'
+      }
+    });
     editor.current = monaco.editor.create(element.current, {
-      model: null, theme: 'vs-dark', readOnly: false, automaticLayout: true,
+      model: null, theme: 'code-agent-black', readOnly: false, automaticLayout: true,
       minimap: { enabled: false }, fontFamily: 'Cascadia Code, Consolas, monospace',
       fontSize: 13, lineHeight: 21, scrollBeyondLastLine: false, smoothScrolling: true,
       padding: { top: 16, bottom: 20 }, renderLineHighlight: 'line', overviewRulerBorder: false

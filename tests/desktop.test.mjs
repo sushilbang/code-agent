@@ -214,6 +214,17 @@ test('local chats and per-workspace permissions persist and can be removed', asy
   assert.deepEqual(await store.listChats(), []);
 }));
 
+test('encrypted API key payload can be saved, replaced, and removed', async () => fixture(async root => {
+  const store = new LocalStore(path.join(root, 'app-data'));
+  assert.equal(await store.getEncryptedOpenAIKey(), null);
+  await store.setEncryptedOpenAIKey('encrypted-one');
+  assert.equal(await new LocalStore(path.join(root, 'app-data')).getEncryptedOpenAIKey(), 'encrypted-one');
+  await store.setEncryptedOpenAIKey('encrypted-two');
+  assert.equal(await store.getEncryptedOpenAIKey(), 'encrypted-two');
+  await store.setEncryptedOpenAIKey(null);
+  assert.equal(await store.getEncryptedOpenAIKey(), null);
+}));
+
 test('agent dispatches create and delete tools through approval', async () => fixture(async root => {
   const oldFetch = globalThis.fetch;
   const oldKey = process.env.OPENAI_API_KEY;

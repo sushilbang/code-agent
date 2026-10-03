@@ -93,4 +93,21 @@ export class LocalStore {
       return permissions[root];
     });
   }
+
+  async getEncryptedOpenAIKey(): Promise<string | null> {
+    return this.serialized(async () => {
+      const settings = await readJson<{ openAIKey?: unknown }>(path.join(this.directory, 'settings.json'), {});
+      return typeof settings.openAIKey === 'string' && settings.openAIKey ? settings.openAIKey : null;
+    });
+  }
+
+  async setEncryptedOpenAIKey(value: string | null): Promise<void> {
+    await this.serialized(async () => {
+      const file = path.join(this.directory, 'settings.json');
+      const settings = await readJson<Record<string, unknown>>(file, {});
+      if (value) settings.openAIKey = value;
+      else delete settings.openAIKey;
+      await writeJson(file, settings);
+    });
+  }
 }

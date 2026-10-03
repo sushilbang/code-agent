@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage } from 'electron';
 import type { AgentApprovalRequest, AgentRequest, ApprovalDecision, ChatRecord } from '../shared/types';
 import { runAgent } from './agent';
 import { buildActionDiff } from './actionDiff';
@@ -18,6 +18,18 @@ let closeConfirmed = false;
 const pendingApprovals = new Map<string, (decision: ApprovalDecision) => void>();
 const actionNames = new Set(['write_file', 'replace_in_file', 'create_file', 'create_directory', 'delete_file', 'delete_directory']);
 let store: LocalStore;
+
+async function savedOpenAIKey(): Promise<string | null> {
+  const encrypted = await store.getEncryptedOpenAIKey();
+  if (!encrypted) return null;
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this computer.');
+  try { return safeStorage.decryptString(Buffer.from(encrypted, 'base64')); }
+  catch { throw new Error('The saved API key could not be decrypted. Remove it and save it again.'); }
+}
+
+async function openAIKey(): Promise<string | null> {
+  return await savedOpenAIKey() || process.env.OPENAI_API_KEY?.trim() || null;
+}
 
 function checkSender(event: Electron.IpcMainInvokeEvent): void {
   if (!event.senderFrame?.url.startsWith('app://-/')) throw new Error('Untrusted IPC sender.');
@@ -210,7 +222,25 @@ ipcMain.handle('chat:delete', (event, id: unknown) => {
 
 ipcMain.handle('agent:environment', event => {
   checkSender(event);
-  return { hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY), defaultModel: process.env.OPENAI_MODEL || 'gpt-5.4' };
+  return savedOpenAIKey().then(key => ({
+    hasOpenAIKey: Boolean(key || process.env.OPENAI_API_KEY),
+    keySource: key ? 'saved' as const : process.env.OPENAI_API_KEY ? 'environment' as const : 'none' as const,
+    defaultModel: process.env.OPENAI_MODEL || 'gpt-5.4'
+  }));
+});
+
+ipcMain.handle('agent:save-key', async (event, value: unknown) => {
+  checkSender(event);
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 500) throw new Error('Enter a valid API key.');
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this computer.');
+  await store.setEncryptedOpenAIKey(safeStorage.encryptString(value.trim()).toString('base64'));
+  return { hasOpenAIKey: true, keySource: 'saved' as const };
+});
+
+ipcMain.handle('agent:delete-key', async event => {
+  checkSender(event);
+  await store.setEncryptedOpenAIKey(null);
+  return { hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY), keySource: process.env.OPENAI_API_KEY ? 'environment' as const : 'none' as const };
 });
 
 ipcMain.handle('agent:start', (event, request: AgentRequest) => {
@@ -228,9 +258,11 @@ ipcMain.handle('agent:start', (event, request: AgentRequest) => {
   const run = { id: request.runId, controller };
   activeRun = run;
   const root = workspaceRoot;
-  void runAgent(root, request, controller.signal, agentEvent => {
+  void openAIKey().then(key => runAgent(root, request, controller.signal, agentEvent => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', agentEvent);
-  }, (change, tool, signal) => requestWriteApproval(request.runId, change, tool, signal)).finally(() => {
+  }, (change, tool, signal) => requestWriteApproval(request.runId, change, tool, signal), key || undefined)).catch(error => {
+    if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', { runId: request.runId, type: 'error', message: error instanceof Error ? error.message : String(error) });
+  }).finally(() => {
     if (activeRun === run) activeRun = null;
   });
 });

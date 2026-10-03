@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ChevronDown, ChevronRight, Code2, FileCode2, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, PanelLeft, PanelRight, Plus, RefreshCw, Settings2, Square, Trash2, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, Code2, Eye, EyeOff, FileCode2, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, KeyRound, PanelLeft, PanelRight, Plus, RefreshCw, Settings2, Square, Trash2, X } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { AgentApprovalRequest, AgentEvent, ApprovalDecision, ChatMessage, ChatSummary, FileNode, WorkspaceSnapshot } from '../shared/types';
@@ -59,6 +59,11 @@ export default function App() {
   const [provider, setProvider] = useState<'local' | 'openai'>('local');
   const [model, setModel] = useState('gpt-5.4');
   const [hasKey, setHasKey] = useState(false);
+  const [keySource, setKeySource] = useState<'saved' | 'environment' | 'none'>('none');
+  const [keyDialog, setKeyDialog] = useState(false);
+  const [keyInput, setKeyInput] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [keySaving, setKeySaving] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState('Ready');
   const [approval, setApproval] = useState<AgentApprovalRequest | null>(null);
@@ -76,6 +81,7 @@ export default function App() {
     if (!window.codeAgent) return;
     void window.codeAgent.getEnvironment().then(environment => {
       setHasKey(environment.hasOpenAIKey);
+      setKeySource(environment.keySource);
       setModel(environment.defaultModel);
       setProvider(environment.hasOpenAIKey ? 'openai' : 'local');
     });
@@ -295,6 +301,28 @@ export default function App() {
     } catch (error) { setStatus(messageOf(error)); }
   }
 
+  async function saveApiKey() {
+    if (!keyInput.trim()) return;
+    setKeySaving(true);
+    try {
+      const result = await window.codeAgent.saveOpenAIKey(keyInput);
+      setHasKey(result.hasOpenAIKey); setKeySource(result.keySource); setKeyInput(''); setShowKey(false); setKeyDialog(false);
+      setProvider('openai'); setStatus('API key saved securely');
+    } catch (error) { setStatus(messageOf(error)); }
+    finally { setKeySaving(false); }
+  }
+
+  async function removeApiKey() {
+    setKeySaving(true);
+    try {
+      const result = await window.codeAgent.deleteOpenAIKey();
+      setHasKey(result.hasOpenAIKey); setKeySource(result.keySource); setKeyInput(''); setShowKey(false); setKeyDialog(false);
+      if (!result.hasOpenAIKey) setProvider('local');
+      setStatus(result.hasOpenAIKey ? 'Saved key removed; using environment key' : 'API key removed');
+    } catch (error) { setStatus(messageOf(error)); }
+    finally { setKeySaving(false); }
+  }
+
   return <div className="app-shell editor-app">
     <main className="workbench" style={{ gridTemplateColumns: `${explorerVisible ? '246px ' : ''}minmax(0,1fr)${agentVisible ? ' 390px' : ''}` }}>
       {explorerVisible && <aside className="explorer-pane">
@@ -326,9 +354,10 @@ export default function App() {
         <div className="agent-title"><div><button className="icon-button" title="New chat" disabled={Boolean(runId)} onClick={() => newChat()}><Plus size={16} /></button><strong>Agent</strong></div><div className="agent-controls">
           <button className={`icon-button ${sidebarView === 'recent' ? 'active' : ''}`} title="Recent chats" disabled={Boolean(approval)} onClick={() => setSidebarView(sidebarView === 'recent' ? 'chat' : 'recent')}><History size={16} /></button>
           <button className={`icon-button ${sidebarView === 'permissions' ? 'active' : ''}`} title="Allowed actions" disabled={Boolean(approval)} onClick={() => setSidebarView(sidebarView === 'permissions' ? 'chat' : 'permissions')}><Settings2 size={16} /></button>
+          <button className={`icon-button ${keyDialog ? 'active' : ''}`} title="API key settings" disabled={Boolean(runId)} onClick={() => setKeyDialog(true)}><KeyRound size={15} /></button>
           <select aria-label="Model provider" value={provider} disabled={Boolean(runId)} onChange={event => setProvider(event.target.value as 'local' | 'openai')}><option value="local">Local inspection</option><option value="openai">OpenAI</option></select>
         </div></div>
-        {provider === 'openai' && <div className="model-row"><label htmlFor="model">Model</label><input id="model" value={model} disabled={Boolean(runId)} onChange={event => setModel(event.target.value)} spellCheck={false} /><span className={`key-dot ${hasKey ? 'ready' : ''}`} title={hasKey ? 'API key available' : 'OPENAI_API_KEY missing'} /></div>}
+        {provider === 'openai' && <div className="model-row"><label htmlFor="model">Model</label><input id="model" value={model} disabled={Boolean(runId)} onChange={event => setModel(event.target.value)} spellCheck={false} /><button className={`key-status ${hasKey ? 'ready' : ''}`} title={hasKey ? `API key configured (${keySource})` : 'Add an API key'} onClick={() => setKeyDialog(true)}><KeyRound size={13} /></button></div>}
         {sidebarView === 'recent' ? <div className="conversation side-list"><div className="side-list-title">Recent chats</div>{recentChats.length ? recentChats.map(chat => <div className="recent-row" key={chat.id}>
           <button onClick={() => void openChat(chat.id)} title={`${chat.workspaceRoot}\n${chat.updatedAt}`}><strong>{chat.title}</strong><span>{chat.workspaceRoot.split(/[\\/]/).at(-1)} · {new Date(chat.updatedAt).toLocaleDateString()}</span></button>
           <button className="icon-button" title={`Delete ${chat.title}`} onClick={() => void deleteChat(chat.id)}><Trash2 size={14} /></button>
@@ -364,6 +393,12 @@ export default function App() {
       <h2>{creation.directory ? 'New folder' : 'New file'}</h2><p>{creation.parent || workspace?.name}</p>
       <input autoFocus aria-label={creation.directory ? 'Folder name' : 'File name'} value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setCreation(null); }} placeholder={creation.directory ? 'folder-name' : 'filename.ts'} />
       <div className="dialog-actions"><button type="button" onClick={() => setCreation(null)}>Cancel</button><button type="submit" className="primary" disabled={!newName.trim()}>Create</button></div>
+    </form></div>}
+    {keyDialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !keySaving) setKeyDialog(false); }}><form className="create-dialog key-dialog" onSubmit={event => { event.preventDefault(); void saveApiKey(); }}>
+      <h2>OpenAI API key</h2><p>{keySource === 'saved' ? 'A key is encrypted and saved on this device.' : keySource === 'environment' ? 'Using OPENAI_API_KEY from the app environment.' : 'Add a key to use OpenAI models.'}</p>
+      <label htmlFor="api-key">API key</label><div className="secret-input"><input id="api-key" autoFocus type={showKey ? 'text' : 'password'} value={keyInput} onChange={event => setKeyInput(event.target.value)} placeholder="sk-..." autoComplete="off" spellCheck={false} /><button type="button" className="icon-button" title={showKey ? 'Hide key' : 'Show key'} onClick={() => setShowKey(previous => !previous)}>{showKey ? <EyeOff size={16} /> : <Eye size={16} />}</button></div>
+      <small>The key is encrypted with your operating system credentials. It is never added to chat history or sent to the editor.</small>
+      <div className="dialog-actions">{keySource === 'saved' && <button type="button" className="danger" disabled={keySaving} onClick={() => void removeApiKey()}>Remove saved key</button>}<span /><button type="button" disabled={keySaving} onClick={() => setKeyDialog(false)}>Cancel</button><button type="submit" className="primary" disabled={keySaving || !keyInput.trim()}>{keySaving ? 'Saving...' : 'Save key'}</button></div>
     </form></div>}
   </div>;
 }

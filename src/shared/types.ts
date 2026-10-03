@@ -87,5 +87,7 @@ export interface DesktopApi {
   saveChat(chat: ChatRecord): Promise<void>;
   deleteChat(id: string): Promise<void>;
   onMenuCommand(listener: (command: string) => void): () => void;
-  getEnvironment(): Promise<{ hasOpenAIKey: boolean; defaultModel: string }>;
+  getEnvironment(): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' | 'environment' | 'none'; defaultModel: string }>;
+  saveOpenAIKey(key: string): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' }>;
+  deleteOpenAIKey(): Promise<{ hasOpenAIKey: boolean; keySource: 'environment' | 'none' }>;
 }

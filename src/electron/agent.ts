@@ -19,7 +19,7 @@ const tools = [
   { type: 'function', name: 'delete_directory', description: 'Recursively delete a folder inside the workspace. Refuses Git metadata, linked paths, folders over 200 entries or 10 MB, and changed contents. Do this only when explicitly requested. Requires approval unless this action is allowed for the workspace.', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }, strict: false }
 ];
 
-export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: Emit, approveWrite: ApproveAgentChange = async () => false): Promise<void> {
+export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: Emit, approveWrite: ApproveAgentChange = async () => false, apiKey?: string): Promise<void> {
   const send = (event: LocalEvent) => emit({ ...event, runId: request.runId } as AgentEvent);
   try {
     if (request.provider === 'local') {
@@ -30,8 +30,8 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
       return;
     }
 
-    const key = process.env.OPENAI_API_KEY;
-    if (!key) throw new Error('OPENAI_API_KEY is missing. Set it before starting the app.');
+    const key = apiKey || process.env.OPENAI_API_KEY;
+    if (!key) throw new Error('An OpenAI API key is required. Add one in Agent settings.');
     if (!request.model.trim()) throw new Error('Choose a model.');
     let input: unknown = [...(request.history || []).slice(-12), { role: 'user', content: request.selectedFile
       ? `Selected file: ${request.selectedFile}\n\n${request.prompt}`
