@@ -1,0 +1,21 @@
+import type { AgentFileChange, AgentPathChange } from '../../workspace';
+import type { OpenAIToolDefinition } from '../providers/openai';
+
+export interface ToolResult { success: boolean; content: string; diff?: string }
+export type ApprovalTarget = AgentFileChange | AgentPathChange | { path: string; before: string | null; after: string; details: string };
+export type ApproveAgentChange = (change: ApprovalTarget, tool: string, signal: AbortSignal, allowAlways?: boolean) => Promise<boolean>;
+
+export interface ToolContext {
+  root: string;
+  signal: AbortSignal;
+  approveWrite: ApproveAgentChange;
+  fileChanged(path: string, deleted?: boolean, directory?: boolean): void;
+  toolOutput(content: string): void;
+}
+
+export interface AgentTool {
+  definition: OpenAIToolDefinition;
+  path(arguments_: Record<string, unknown>): string;
+  describe(arguments_: Record<string, unknown>): string;
+  execute(context: ToolContext, arguments_: Record<string, unknown>): Promise<ToolResult>;
+}

@@ -86,14 +86,16 @@ export async function createWorkspaceEntry(root: string, relativePath: string, d
   return buildWorkspace(root);
 }
 
-export async function listFiles(root: string, relativePath = '.', limit = 200): Promise<string[]> {
+export async function listFiles(root: string, relativePath = '.', limit = 200, signal?: AbortSignal): Promise<string[]> {
   const directory = await resolveWorkspacePath(root, relativePath);
   if (!(await fs.stat(directory)).isDirectory()) throw new Error('Directory not found.');
   const result: string[] = [];
   const walk = async (current: string): Promise<void> => {
+    signal?.throwIfAborted();
     const entries = await fs.readdir(current, { withFileTypes: true });
     entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
     for (const entry of entries) {
+      signal?.throwIfAborted();
       if (result.length >= limit) return;
       if (entry.isSymbolicLink() || (entry.isDirectory() && ignored.has(entry.name.toLowerCase()))) continue;
       const fullPath = path.join(current, entry.name);

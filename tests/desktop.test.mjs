@@ -7,6 +7,11 @@ import { applyAgentChange, applyAgentPathChange, buildWorkspace, createWorkspace
 import { runAgent } from '../dist-electron/electron/agent.js';
 import { LocalStore } from '../dist-electron/electron/storage.js';
 import { buildActionDiff } from '../dist-electron/electron/actionDiff.js';
+import { readResponseStream } from '../dist-electron/electron/agent/providers/openai.js';
+import { filesystemTools } from '../dist-electron/electron/agent/tools/filesystem.js';
+import { ToolRegistry } from '../dist-electron/electron/agent/tools/registry.js';
+import { workspaceSearchTools } from '../dist-electron/electron/agent/tools/search.js';
+import { shellTools } from '../dist-electron/electron/agent/tools/shell.js';
 import { applyPatch } from 'diff';
 
 async function fixture(run) {
@@ -42,6 +47,117 @@ test('local inspection emits a response and completion', async () => fixture(asy
   await runAgent(root, { runId: 'test', prompt: 'Inspect', provider: 'local', model: '' }, new AbortController().signal, event => events.push(event));
   assert.deepEqual(events.map(event => event.type), ['delta', 'done']);
   assert.match(events[0].text, /1 files/);
+}));
+
+test('tool registry exposes and dispatches filesystem tools', async () => fixture(async root => {
+  await writeFile(path.join(root, 'hello.txt'), 'hello');
+  const registry = new ToolRegistry(filesystemTools);
+  assert.deepEqual(registry.definitions().map(tool => tool.name), [
+    'list_files', 'read_file', 'write_file', 'replace_in_file',
+    'create_file', 'create_directory', 'delete_file', 'delete_directory'
+  ]);
+  const prepared = registry.prepare('read_file', JSON.stringify({ path: 'hello.txt' }));
+  assert.equal(prepared.path, 'hello.txt');
+  assert.equal(prepared.description, 'Reading hello.txt');
+  const result = await prepared.execute({
+    root, signal: new AbortController().signal, approveWrite: async () => false, fileChanged() {}
+  });
+  assert.deepEqual(result, { success: true, content: 'hello' });
+  assert.throws(() => registry.prepare('missing_tool', '{}'), /Unknown tool/);
+  assert.throws(() => registry.prepare('read_file', '[]'), /Invalid tool arguments/);
+  assert.throws(() => registry.prepare('read_file', '{}'), /Missing required tool argument: path/);
+  assert.throws(() => registry.prepare('list_files', '{"limit":"many"}'), /limit must be integer/);
+}));
+
+test('OpenAI stream parsing respects cancellation', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const stream = new ReadableStream({ start(target) { target.close(); } });
+  await assert.rejects(readResponseStream(stream, controller.signal, () => {}, () => {}), /Stopped/);
+});
+
+test('glob and text search are bounded to safe workspace files', async () => fixture(async root => {
+  await mkdir(path.join(root, 'src'));
+  await mkdir(path.join(root, 'node_modules'));
+  await writeFile(path.join(root, 'src', 'one.ts'), 'export const Needle = 1;\n');
+  await writeFile(path.join(root, 'src', 'two.js'), 'const needle = 2;\n');
+  await writeFile(path.join(root, 'node_modules', 'hidden.ts'), 'const Needle = 3;\n');
+  const registry = new ToolRegistry(workspaceSearchTools);
+  const context = { root, signal: new AbortController().signal, approveWrite: async () => false, fileChanged() {} };
+
+  const glob = await registry.prepare('glob_files', '{"pattern":"**/*.ts"}').execute(context);
+  assert.equal(glob.content, 'src/one.ts');
+  const search = await registry.prepare('search_text', '{"query":"needle","path":"src","glob":"**/*.*"}').execute(context);
+  assert.match(search.content, /src\/one\.ts:1:/);
+  assert.match(search.content, /src\/two\.js:1:/);
+  assert.doesNotMatch(search.content, /hidden/);
+  await assert.rejects(registry.prepare('glob_files', '{"pattern":"../*.ts"}').execute(context), /simple glob pattern|traversal/);
+
+  const controller = new AbortController();
+  controller.abort();
+  const cancelled = registry.prepare('search_text', '{"query":"needle"}');
+  await assert.rejects(cancelled.execute({ ...context, signal: controller.signal }), /abort/i);
+}));
+
+test('command tool requires approval and streams bounded workspace execution', async () => fixture(async root => {
+  const registry = new ToolRegistry(shellTools);
+  const prepared = registry.prepare('run_command', JSON.stringify({ executable: 'node', args: ['-e', 'console.log("hello")'], cwd: '.' }));
+  const streamed = [];
+  let approval;
+  const result = await prepared.execute({
+    root, signal: new AbortController().signal, fileChanged() {}, toolOutput: chunk => streamed.push(chunk),
+    approveWrite: async (change, tool, _signal, allowAlways) => { approval = { change, tool, allowAlways }; return true; }
+  });
+  assert.equal(result.success, true);
+  assert.match(result.content, /hello/);
+  assert.match(result.content, /exit code: 0/);
+  assert.match(streamed.join(''), /hello/);
+  assert.equal(approval.tool, 'run_command');
+  assert.equal(approval.allowAlways, false);
+  assert.match(approval.change.details, /Working directory: \./);
+
+  const denied = await prepared.execute({
+    root, signal: new AbortController().signal, fileChanged() {}, toolOutput() {}, approveWrite: async () => false
+  });
+  assert.deepEqual(denied, { success: false, content: 'Command was not approved.' });
+  await assert.rejects(registry.prepare('run_command', JSON.stringify({ executable: 'node', args: [], cwd: '..' })).execute({
+    root, signal: new AbortController().signal, fileChanged() {}, toolOutput() {}, approveWrite: async () => true
+  }), /outside the workspace/);
+}));
+
+test('command tool terminates on cancellation', async () => fixture(async root => {
+  const registry = new ToolRegistry(shellTools);
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const running = registry.prepare('run_command', JSON.stringify({ executable: 'node', args: ['-e', 'setTimeout(() => {}, 10000)'] })).execute({
+    root, signal: controller.signal, fileChanged() {}, toolOutput() {}, approveWrite: async () => true
+  });
+  setTimeout(() => controller.abort(), 50);
+  const result = await running;
+  assert.equal(result.success, false);
+  assert.match(result.content, /stopped/i);
+  assert.ok(Date.now() - startedAt < 3000, 'cancelled command should terminate promptly');
+}));
+
+test('command tool enforces timeout and truncates output', async () => fixture(async root => {
+  const registry = new ToolRegistry(shellTools);
+  const context = {
+    root, signal: new AbortController().signal, fileChanged() {}, toolOutput() {}, approveWrite: async () => true
+  };
+  const startedAt = Date.now();
+  const timedOut = await registry.prepare('run_command', JSON.stringify({
+    executable: 'node', args: ['-e', 'setTimeout(() => {}, 10000)'], timeout_ms: 1000
+  })).execute(context);
+  assert.equal(timedOut.success, false);
+  assert.match(timedOut.content, /timed out/i);
+  assert.ok(Date.now() - startedAt < 4000, 'timed out command should terminate promptly');
+
+  const truncated = await registry.prepare('run_command', JSON.stringify({
+    executable: 'node', args: ['-e', 'process.stdout.write("x".repeat(50000))']
+  })).execute(context);
+  assert.equal(truncated.success, true);
+  assert.match(truncated.content, /\[output truncated\]/);
+  assert.ok(truncated.content.length < 40100);
 }));
 
 test('create file and folder, then save without overwriting external changes', async () => fixture(async root => {

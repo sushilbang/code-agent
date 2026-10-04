@@ -7,6 +7,7 @@ const api: DesktopApi = {
   readFile: path => ipcRenderer.invoke('workspace:read', path),
   saveFile: (path, content, expectedContent) => ipcRenderer.invoke('workspace:save', path, content, expectedContent),
   createEntry: (path, directory) => ipcRenderer.invoke('workspace:create', path, directory),
+  deleteEntry: (path, directory) => ipcRenderer.invoke('workspace:delete', path, directory),
   confirmDiscard: () => ipcRenderer.invoke('workspace:confirm-discard'),
   reportDirty: paths => ipcRenderer.invoke('editor:dirty', paths),
   startAgent: (request: AgentRequest) => ipcRenderer.invoke('agent:start', request),

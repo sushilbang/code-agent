@@ -6,3 +6,5 @@ dist-electron/
 .electron-data/
 .chrome-qa/
 artifacts/
+roadmap.md
+AGENTS.md

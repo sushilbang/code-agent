@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage } from 'electron';
 import type { AgentApprovalRequest, AgentRequest, ApprovalDecision, ChatRecord } from '../shared/types';
-import { runAgent } from './agent';
+import { DEFAULT_OPENAI_MODEL, isOpenAIModel } from '../shared/models';
+import { runAgent, type ApprovalTarget } from './agent';
 import { buildActionDiff } from './actionDiff';
 import { LocalStore } from './storage';
-import { buildWorkspace, createWorkspaceEntry, readPreview, saveWorkspaceFile, type AgentFileChange, type AgentPathChange } from './workspace';
+import { applyAgentPathChange, buildWorkspace, createWorkspaceEntry, planAgentDelete, readPreview, saveWorkspaceFile, type AgentFileChange, type AgentPathChange } from './workspace';
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
@@ -35,18 +36,18 @@ function checkSender(event: Electron.IpcMainInvokeEvent): void {
   if (!event.senderFrame?.url.startsWith('app://-/')) throw new Error('Untrusted IPC sender.');
 }
 
-async function requestWriteApproval(runId: string, change: AgentFileChange | AgentPathChange, tool: string, signal: AbortSignal): Promise<boolean> {
+async function requestWriteApproval(runId: string, change: ApprovalTarget, tool: string, signal: AbortSignal, allowAlways = true): Promise<boolean> {
   const root = workspaceRoot;
   if (signal.aborted || [...dirtyPaths].some(file => file === change.path || ('operation' in change && change.operation === 'delete_directory' && file.startsWith(`${change.path}/`))) ||
     !mainWindow || mainWindow.isDestroyed() || !root) return false;
-  if ((await store.allowedActions(root)).includes(tool)) return !signal.aborted;
+  if (allowAlways && (await store.allowedActions(root)).includes(tool)) return !signal.aborted;
   return new Promise(resolve => {
     const id = randomUUID();
     const finish = (decision: ApprovalDecision) => {
       if (!pendingApprovals.has(id)) return;
       pendingApprovals.delete(id);
       signal.removeEventListener('abort', cancel);
-      if (decision === 'always') {
+      if (decision === 'always' && allowAlways) {
         void store.allowAction(root, tool).then(() => resolve(!signal.aborted), () => resolve(false));
       } else resolve(decision === 'once' && !signal.aborted);
     };
@@ -60,8 +61,9 @@ async function requestWriteApproval(runId: string, change: AgentFileChange | Age
       path: change.path,
       before: change.before,
       after: change.after,
-      diff: buildActionDiff(change),
-      details: 'details' in change ? change.details : undefined
+      diff: tool === 'run_command' ? undefined : buildActionDiff(change as AgentFileChange | AgentPathChange),
+      details: 'details' in change ? change.details : undefined,
+      allowAlways
     };
     mainWindow!.webContents.send('agent:approval-request', approval);
   });
@@ -175,6 +177,28 @@ ipcMain.handle('workspace:create', async (event, relativePath: unknown, director
   return createWorkspaceEntry(workspaceRoot, relativePath, directory);
 });
 
+ipcMain.handle('workspace:delete', async (event, relativePath: unknown, directory: unknown) => {
+  checkSender(event);
+  if (!workspaceRoot) throw new Error('Open a repository first.');
+  if (typeof relativePath !== 'string' || typeof directory !== 'boolean') throw new Error('Invalid delete request.');
+  if ([...dirtyPaths].some(file => file === relativePath || (directory && file.startsWith(`${relativePath}/`)))) {
+    throw new Error('Save or close affected files before deleting them.');
+  }
+  const change = await planAgentDelete(workspaceRoot, relativePath, directory);
+  const result = await dialog.showMessageBox(mainWindow!, {
+    type: 'warning',
+    buttons: ['Cancel', 'Delete'],
+    defaultId: 0,
+    cancelId: 0,
+    message: `Delete ${directory ? 'folder' : 'file'}?`,
+    detail: `${relativePath}\n\n${change.details}`,
+    noLink: true
+  });
+  if (result.response !== 1) return null;
+  await applyAgentPathChange(workspaceRoot, change);
+  return buildWorkspace(workspaceRoot);
+});
+
 ipcMain.handle('workspace:confirm-discard', async event => {
   checkSender(event);
   const result = await dialog.showMessageBox(mainWindow!, {
@@ -225,7 +249,7 @@ ipcMain.handle('agent:environment', event => {
   return savedOpenAIKey().then(key => ({
     hasOpenAIKey: Boolean(key || process.env.OPENAI_API_KEY),
     keySource: key ? 'saved' as const : process.env.OPENAI_API_KEY ? 'environment' as const : 'none' as const,
-    defaultModel: process.env.OPENAI_MODEL || 'gpt-5.4'
+    defaultModel: isOpenAIModel(process.env.OPENAI_MODEL) ? process.env.OPENAI_MODEL : DEFAULT_OPENAI_MODEL
   }));
 });
 
@@ -249,6 +273,7 @@ ipcMain.handle('agent:start', (event, request: AgentRequest) => {
   if (activeRun) throw new Error('An agent response is already running.');
   if (!request || typeof request.runId !== 'string' || typeof request.prompt !== 'string' || !request.prompt.trim() ||
       (request.provider !== 'local' && request.provider !== 'openai') || typeof request.model !== 'string' ||
+      (request.provider === 'openai' && !isOpenAIModel(request.model)) ||
       (request.selectedFile !== undefined && typeof request.selectedFile !== 'string') ||
       (request.history !== undefined && (!Array.isArray(request.history) || request.history.length > 12 ||
         request.history.some(item => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || item.content.length > 10000)))) {
@@ -260,7 +285,7 @@ ipcMain.handle('agent:start', (event, request: AgentRequest) => {
   const root = workspaceRoot;
   void openAIKey().then(key => runAgent(root, request, controller.signal, agentEvent => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', agentEvent);
-  }, (change, tool, signal) => requestWriteApproval(request.runId, change, tool, signal), key || undefined)).catch(error => {
+  }, (change, tool, signal, allowAlways) => requestWriteApproval(request.runId, change, tool, signal, allowAlways), key || undefined)).catch(error => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', { runId: request.runId, type: 'error', message: error instanceof Error ? error.message : String(error) });
   }).finally(() => {
     if (activeRun === run) activeRun = null;

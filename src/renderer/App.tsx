@@ -1,26 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ChevronDown, ChevronRight, Code2, Eye, EyeOff, FileCode2, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, KeyRound, PanelLeft, PanelRight, Plus, RefreshCw, Settings2, Square, Trash2, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, Code2, Copy, Eye, EyeOff, FileCode2, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, KeyRound, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Plus, RefreshCw, Save, Settings2, Square, Trash2, X } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { AgentApprovalRequest, AgentEvent, ApprovalDecision, ChatMessage, ChatSummary, FileNode, WorkspaceSnapshot } from '../shared/types';
+import { DEFAULT_OPENAI_MODEL, isOpenAIModel, OPENAI_MODELS } from '../shared/models';
 import Editor, { type EditorTab } from './Editor';
 
 type Message = ChatMessage;
 
-function TreeNode({ node, depth, expanded, toggle, selected, selectFile, selectDirectory }: {
+function TreeNode({ node, depth, expanded, toggle, selected, selectFile, selectDirectory, openContextMenu }: {
   node: FileNode; depth: number; expanded: Set<string>; toggle: (path: string) => void;
   selected: string | null; selectFile: (node: FileNode) => void; selectDirectory: (node: FileNode) => void;
+  openContextMenu: (node: FileNode, x: number, y: number) => void;
 }) {
   const open = expanded.has(node.path);
   const Icon = node.directory ? (open ? FolderOpen : Folder) : /\.(md|txt|log)$/i.test(node.name) ? FileText : FileCode2;
   return <>
     <button className={`tree-row ${selected === node.path ? 'selected' : ''}`} style={{ paddingLeft: 12 + depth * 15 }}
-      title={node.path} onClick={() => node.directory ? (selectDirectory(node), toggle(node.path)) : selectFile(node)}>
+      title={node.path} onClick={() => node.directory ? (selectDirectory(node), toggle(node.path)) : selectFile(node)}
+      onContextMenu={event => { event.preventDefault(); openContextMenu(node, event.clientX, event.clientY); }}>
       <span className="tree-chevron">{node.directory ? open ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}</span>
       <Icon size={15} className={node.directory ? 'folder-icon' : 'file-icon'} strokeWidth={1.8} />
       <span className="tree-name">{node.name}</span>
     </button>
-    {node.directory && open && node.children?.map(child => <TreeNode key={child.path} node={child} depth={depth + 1} expanded={expanded} toggle={toggle} selected={selected} selectFile={selectFile} selectDirectory={selectDirectory} />)}
+    {node.directory && open && node.children?.map(child => <TreeNode key={child.path} node={child} depth={depth + 1} expanded={expanded} toggle={toggle} selected={selected} selectFile={selectFile} selectDirectory={selectDirectory} openContextMenu={openContextMenu} />)}
   </>;
 }
 
@@ -49,6 +52,9 @@ export default function App() {
   const [newName, setNewName] = useState('');
   const [explorerVisible, setExplorerVisible] = useState(true);
   const [agentVisible, setAgentVisible] = useState(true);
+  const [explorerWidth, setExplorerWidth] = useState(246);
+  const [agentWidth, setAgentWidth] = useState(390);
+  const [contextMenu, setContextMenu] = useState<{ node: FileNode; x: number; y: number } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatId, setChatId] = useState<string>(() => crypto.randomUUID());
   const [chatRoot, setChatRoot] = useState<string | null>(null);
@@ -57,7 +63,7 @@ export default function App() {
   const [allowedActions, setAllowedActions] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
   const [provider, setProvider] = useState<'local' | 'openai'>('local');
-  const [model, setModel] = useState('gpt-5.4');
+  const [model, setModel] = useState<string>(DEFAULT_OPENAI_MODEL);
   const [hasKey, setHasKey] = useState(false);
   const [keySource, setKeySource] = useState<'saved' | 'environment' | 'none'>('none');
   const [keyDialog, setKeyDialog] = useState(false);
@@ -82,7 +88,7 @@ export default function App() {
     void window.codeAgent.getEnvironment().then(environment => {
       setHasKey(environment.hasOpenAIKey);
       setKeySource(environment.keySource);
-      setModel(environment.defaultModel);
+      setModel(isOpenAIModel(environment.defaultModel) ? environment.defaultModel : DEFAULT_OPENAI_MODEL);
       setProvider(environment.hasOpenAIKey ? 'openai' : 'local');
     });
     void window.codeAgent.listChats().then(setRecentChats).catch(error => setStatus(messageOf(error)));
@@ -105,6 +111,13 @@ export default function App() {
   }, [workspace, tabs, activePath, selectedNode]);
 
   useEffect(() => { messageEnd.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, [messages, approval, sidebarView]);
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
+    window.addEventListener('pointerdown', close); window.addEventListener('blur', close); window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('blur', close); window.removeEventListener('keydown', onKey); };
+  }, [contextMenu]);
   useEffect(() => { if (window.codeAgent) void window.codeAgent.reportDirty(tabs.filter(tab => tab.content !== tab.savedContent).map(tab => tab.path)); }, [tabs]);
   useEffect(() => {
     if (!chatRoot || !messages.length) return;
@@ -131,6 +144,9 @@ export default function App() {
     } else if (event.type === 'tool-result') {
       setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, tools: message.tools?.map(tool => tool.id === event.id ? { ...tool, success: event.success, content: event.content, diff: event.diff } : tool) } : message));
       setStatus(event.success ? 'Working' : 'Tool failed');
+    } else if (event.type === 'tool-output') {
+      setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, tools: message.tools?.map(tool => tool.id === event.id ? { ...tool, content: `${tool.content || ''}${event.content}`.slice(-20000) } : tool) } : message));
+      setStatus('Command running');
     } else if (event.type === 'file-changed') {
       const root = workspaceRef.current;
       void window.codeAgent.refreshWorkspace().then(snapshot => { if (root === workspaceRef.current) setWorkspace(snapshot); }).catch(error => setStatus(messageOf(error)));
@@ -192,12 +208,17 @@ export default function App() {
   }
 
   async function saveActive() {
-    if (!activeTab) return;
-    if (activeTab.content === activeTab.savedContent) { setStatus('No changes to save'); return; }
+    if (activeTab) await saveTab(activeTab.path);
+  }
+
+  async function saveTab(file: string) {
+    const tab = tabs.find(item => item.path === file);
+    if (!tab) return;
+    if (tab.content === tab.savedContent) { setStatus('No changes to save'); return; }
     try {
-      const saved = await window.codeAgent.saveFile(activeTab.path, activeTab.content, activeTab.savedContent);
-      setTabs(previous => previous.map(tab => tab.path === activeTab.path ? { ...tab, savedContent: saved.content, size: new Blob([tab.content]).size, lines: tab.content ? tab.content.split('\n').length : 0 } : tab));
-      setStatus(`Saved ${activeTab.path}`);
+      const saved = await window.codeAgent.saveFile(tab.path, tab.content, tab.savedContent);
+      setTabs(previous => previous.map(item => item.path === tab.path ? { ...item, savedContent: saved.content, size: new Blob([item.content]).size, lines: item.content ? item.content.split('\n').length : 0 } : item));
+      setStatus(`Saved ${tab.path}`);
     } catch (error) { setStatus(messageOf(error)); }
   }
 
@@ -211,10 +232,33 @@ export default function App() {
     if (activePath === file) setActivePath(remaining[Math.min(index, remaining.length - 1)]?.path || null);
   }
 
-  function beginCreate(directory: boolean) {
+  function beginCreate(directory: boolean, parentOverride?: string) {
     if (!workspace) { setStatus('Open a repository first'); return; }
-    const parent = selectedNode ? (selectedNode.directory ? selectedNode.path : parentOf(selectedNode.path)) : activePath ? parentOf(activePath) : '';
+    const parent = parentOverride !== undefined ? parentOverride : selectedNode ? (selectedNode.directory ? selectedNode.path : parentOf(selectedNode.path)) : activePath ? parentOf(activePath) : '';
     setCreation({ directory, parent }); setNewName('');
+  }
+
+  function beginResize(side: 'explorer' | 'agent', event: React.PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = side === 'explorer' ? explorerWidth : agentWidth;
+    document.body.classList.add('resizing-panes');
+    const move = (moveEvent: PointerEvent) => {
+      const delta = side === 'explorer' ? moveEvent.clientX - startX : startX - moveEvent.clientX;
+      const maximum = side === 'explorer' ? Math.min(480, window.innerWidth - 620) : Math.min(620, window.innerWidth - 520);
+      const width = Math.max(side === 'explorer' ? 170 : 300, Math.min(maximum, startWidth + delta));
+      if (side === 'explorer') setExplorerWidth(width); else setAgentWidth(width);
+    };
+    const stop = () => {
+      document.body.classList.remove('resizing-panes');
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop);
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop, { once: true });
+  }
+
+  function openContextMenu(node: FileNode, x: number, y: number) {
+    setSelectedNode(node);
+    setContextMenu({ node, x: Math.min(x, window.innerWidth - 210), y: Math.min(y, window.innerHeight - 220) });
   }
 
   async function createEntry() {
@@ -227,6 +271,18 @@ export default function App() {
       setWorkspace(next); setCreation(null); setStatus(`Created ${target}`);
       if (creation.parent) setExpanded(previous => new Set(previous).add(creation.parent));
       if (!creation.directory) await openFile({ name, path: target, directory: false });
+    } catch (error) { setStatus(messageOf(error)); }
+  }
+
+  async function deleteEntry(node: FileNode) {
+    try {
+      const next = await window.codeAgent.deleteEntry(node.path, node.directory);
+      if (!next) { setStatus('Delete cancelled'); return; }
+      const removed = (file: string) => file === node.path || (node.directory && file.startsWith(`${node.path}/`));
+      const remaining = tabs.filter(tab => !removed(tab.path));
+      setWorkspace(next); setTabs(remaining); setSelectedNode(previous => previous && removed(previous.path) ? null : previous);
+      setActivePath(previous => previous && removed(previous) ? remaining.at(-1)?.path || null : previous);
+      setStatus(`Deleted ${node.path}`);
     } catch (error) { setStatus(messageOf(error)); }
   }
 
@@ -324,18 +380,20 @@ export default function App() {
   }
 
   return <div className="app-shell editor-app">
-    <main className="workbench" style={{ gridTemplateColumns: `${explorerVisible ? '246px ' : ''}minmax(0,1fr)${agentVisible ? ' 390px' : ''}` }}>
+    <main className="workbench" style={{ gridTemplateColumns: `${explorerVisible ? `${explorerWidth}px 4px ` : ''}minmax(0,1fr)${agentVisible ? ` 4px ${agentWidth}px` : ''}` }}>
       {explorerVisible && <aside className="explorer-pane">
         <div className="pane-title"><span>EXPLORER</span><div className="pane-actions">
           <button className="icon-button" title="New file" disabled={!workspace} onClick={() => beginCreate(false)}><FilePlus2 size={15} /></button>
           <button className="icon-button" title="New folder" disabled={!workspace} onClick={() => beginCreate(true)}><FolderPlus size={15} /></button>
           <button className="icon-button" title="Refresh files" disabled={!workspace} onClick={refreshWorkspace}><RefreshCw size={15} /></button>
+          <button className="icon-button" title="Collapse explorer" aria-label="Collapse explorer" onClick={() => setExplorerVisible(false)}><PanelLeftClose size={15} /></button>
         </div></div>
         {workspace ? <>
           <div className="repo-heading"><GitBranch size={14} /><span title={workspace.root}>{workspace.name}</span><small>{workspace.fileCount}</small></div>
-          <div className="tree-scroll">{workspace.nodes.map(node => <TreeNode key={node.path} node={node} depth={0} expanded={expanded} toggle={toggle} selected={selectedNode?.path || null} selectFile={openFile} selectDirectory={setSelectedNode} />)}</div>
+          <div className="tree-scroll">{workspace.nodes.map(node => <TreeNode key={node.path} node={node} depth={0} expanded={expanded} toggle={toggle} selected={selectedNode?.path || null} selectFile={openFile} selectDirectory={setSelectedNode} openContextMenu={openContextMenu} />)}</div>
         </> : <div className="explorer-empty"><button className="empty-open-button" onClick={openFolder}>Open folder</button></div>}
       </aside>}
+      {explorerVisible && <div className="pane-resizer" role="separator" aria-label="Resize explorer" aria-orientation="vertical" onPointerDown={event => beginResize('explorer', event)} />}
 
       <section className="editor-pane">
         <div className="editor-tabbar">
@@ -350,14 +408,15 @@ export default function App() {
         {!activeTab && <div className="editor-empty"><Code2 size={37} strokeWidth={1.25} /><strong>Open a file</strong><span>Choose a file from the explorer</span></div>}
       </section>
 
+      {agentVisible && <div className="pane-resizer" role="separator" aria-label="Resize agent" aria-orientation="vertical" onPointerDown={event => beginResize('agent', event)} />}
       {agentVisible && <aside className="agent-pane">
         <div className="agent-title"><div><button className="icon-button" title="New chat" disabled={Boolean(runId)} onClick={() => newChat()}><Plus size={16} /></button><strong>Agent</strong></div><div className="agent-controls">
           <button className={`icon-button ${sidebarView === 'recent' ? 'active' : ''}`} title="Recent chats" disabled={Boolean(approval)} onClick={() => setSidebarView(sidebarView === 'recent' ? 'chat' : 'recent')}><History size={16} /></button>
           <button className={`icon-button ${sidebarView === 'permissions' ? 'active' : ''}`} title="Allowed actions" disabled={Boolean(approval)} onClick={() => setSidebarView(sidebarView === 'permissions' ? 'chat' : 'permissions')}><Settings2 size={16} /></button>
           <button className={`icon-button ${keyDialog ? 'active' : ''}`} title="API key settings" disabled={Boolean(runId)} onClick={() => setKeyDialog(true)}><KeyRound size={15} /></button>
+          <button className="icon-button" title="Collapse agent" aria-label="Collapse agent" onClick={() => setAgentVisible(false)}><PanelRightClose size={15} /></button>
           <select aria-label="Model provider" value={provider} disabled={Boolean(runId)} onChange={event => setProvider(event.target.value as 'local' | 'openai')}><option value="local">Local inspection</option><option value="openai">OpenAI</option></select>
         </div></div>
-        {provider === 'openai' && <div className="model-row"><label htmlFor="model">Model</label><input id="model" value={model} disabled={Boolean(runId)} onChange={event => setModel(event.target.value)} spellCheck={false} /><button className={`key-status ${hasKey ? 'ready' : ''}`} title={hasKey ? `API key configured (${keySource})` : 'Add an API key'} onClick={() => setKeyDialog(true)}><KeyRound size={13} /></button></div>}
         {sidebarView === 'recent' ? <div className="conversation side-list"><div className="side-list-title">Recent chats</div>{recentChats.length ? recentChats.map(chat => <div className="recent-row" key={chat.id}>
           <button onClick={() => void openChat(chat.id)} title={`${chat.workspaceRoot}\n${chat.updatedAt}`}><strong>{chat.title}</strong><span>{chat.workspaceRoot.split(/[\\/]/).at(-1)} · {new Date(chat.updatedAt).toLocaleDateString()}</span></button>
           <button className="icon-button" title={`Delete ${chat.title}`} onClick={() => void deleteChat(chat.id)}><Trash2 size={14} /></button>
@@ -378,13 +437,13 @@ export default function App() {
             <div className="approval-inline-heading"><strong>{approval.tool.replaceAll('_', ' ')}</strong><span>{approval.path}</span></div>
             {approval.details && <p>{approval.details}</p>}
             <details open><summary>Review changes</summary><div className="approval-inline-code">{approval.diff ? <div><strong>Diff</strong><DiffView diff={approval.diff} /></div> : null}<div><strong>Current</strong><pre>{approval.before ?? '(does not exist)'}</pre></div><div><strong>Proposed</strong><pre>{approval.after || (approval.tool.startsWith('delete_') ? '(deleted)' : '(empty)')}</pre></div></div></details>
-            <div className="approval-inline-actions"><button onClick={() => void answerApproval('deny')}>Reject</button><button onClick={() => void answerApproval('once')}>Allow once</button><button className="primary" title={`Always allow ${approval.tool} in this folder`} onClick={() => void answerApproval('always')}>Always allow</button></div>
+            <div className="approval-inline-actions"><button onClick={() => void answerApproval('deny')}>Reject</button><button onClick={() => void answerApproval('once')}>Allow once</button>{approval.allowAlways !== false && <button className="primary" title={`Always allow ${approval.tool} in this folder`} onClick={() => void answerApproval('always')}>Always allow</button>}</div>
           </section>}
           <div ref={messageEnd} />
         </div>}
         <div className="composer-wrap"><div className="composer">
           <textarea aria-label="Message to agent" placeholder={chatMatchesWorkspace ? 'Ask about this repository' : 'Open the linked folder to continue'} value={prompt} onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} disabled={!workspace || !chatMatchesWorkspace || Boolean(runId)} />
-          <div className="composer-foot"><span className="composer-context" title={activePath || undefined}>{activePath ? activePath.split('/').at(-1) : workspace?.name || ''}</span><button className="send-button" title={runId ? 'Stop response' : 'Send message'} aria-label={runId ? 'Stop response' : 'Send message'} disabled={!runId && (!workspace || !chatMatchesWorkspace || !prompt.trim())} onClick={() => void send()}>{runId ? <Square size={14} fill="currentColor" /> : <ArrowUp size={19} strokeWidth={2.5} />}</button></div>
+          <div className="composer-foot"><span className="composer-context" title={activePath || undefined}>{activePath ? activePath.split('/').at(-1) : workspace?.name || ''}</span>{provider === 'openai' && <select className="composer-model" aria-label="OpenAI model" title="Model" value={model} disabled={Boolean(runId)} onChange={event => setModel(event.target.value)}>{OPENAI_MODELS.map(name => <option value={name} key={name}>{name}</option>)}</select>}<button className="send-button" title={runId ? 'Stop response' : 'Send message'} aria-label={runId ? 'Stop response' : 'Send message'} disabled={!runId && (!workspace || !chatMatchesWorkspace || !prompt.trim())} onClick={() => void send()}>{runId ? <Square size={12} fill="currentColor" /> : <ArrowUp size={16} strokeWidth={2.4} />}</button></div>
         </div></div>
       </aside>}
     </main>
@@ -400,5 +459,15 @@ export default function App() {
       <small>The key is encrypted with your operating system credentials. It is never added to chat history or sent to the editor.</small>
       <div className="dialog-actions">{keySource === 'saved' && <button type="button" className="danger" disabled={keySaving} onClick={() => void removeApiKey()}>Remove saved key</button>}<span /><button type="button" disabled={keySaving} onClick={() => setKeyDialog(false)}>Cancel</button><button type="submit" className="primary" disabled={keySaving || !keyInput.trim()}>{keySaving ? 'Saving...' : 'Save key'}</button></div>
     </form></div>}
+    {contextMenu && <div className="file-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={event => event.stopPropagation()}>
+      {!contextMenu.node.directory && <button role="menuitem" onClick={() => { void openFile(contextMenu.node); setContextMenu(null); }}><FileCode2 size={14} />Open</button>}
+      {!contextMenu.node.directory && tabs.some(tab => tab.path === contextMenu.node.path && tab.content !== tab.savedContent) && <button role="menuitem" onClick={() => { void saveTab(contextMenu.node.path); setContextMenu(null); }}><Save size={14} />Save</button>}
+      <button role="menuitem" onClick={() => { void navigator.clipboard.writeText(contextMenu.node.path).then(() => setStatus('Relative path copied')); setContextMenu(null); }}><Copy size={14} />Copy relative path</button>
+      <div className="context-separator" />
+      <button role="menuitem" onClick={() => { beginCreate(false, contextMenu.node.directory ? contextMenu.node.path : parentOf(contextMenu.node.path)); setContextMenu(null); }}><FilePlus2 size={14} />New file here</button>
+      <button role="menuitem" onClick={() => { beginCreate(true, contextMenu.node.directory ? contextMenu.node.path : parentOf(contextMenu.node.path)); setContextMenu(null); }}><FolderPlus size={14} />New folder here</button>
+      {!contextMenu.node.directory && tabs.some(tab => tab.path === contextMenu.node.path) && <><div className="context-separator" /><button role="menuitem" onClick={() => { void closeTab(contextMenu.node.path); setContextMenu(null); }}><X size={14} />Close editor</button></>}
+      <div className="context-separator" /><button className="danger" role="menuitem" onClick={() => { void deleteEntry(contextMenu.node); setContextMenu(null); }}><Trash2 size={14} />Delete</button>
+    </div>}
   </div>;
 }

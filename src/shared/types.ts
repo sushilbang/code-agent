@@ -29,6 +29,7 @@ export interface AgentApprovalRequest {
   after: string;
   diff?: string;
   details?: string;
+  allowAlways?: boolean;
 }
 
 export type ApprovalDecision = 'once' | 'always' | 'deny';
@@ -54,6 +55,7 @@ export type AgentEvent =
   | { runId: string; type: 'reasoning'; text: string }
   | { runId: string; type: 'tool-start'; id: string; name: string; path: string; description: string }
   | { runId: string; type: 'tool-result'; id: string; success: boolean; content: string; diff?: string }
+  | { runId: string; type: 'tool-output'; id: string; content: string }
   | { runId: string; type: 'file-changed'; path: string; deleted?: boolean; directory?: boolean }
   | { runId: string; type: 'done' }
   | { runId: string; type: 'error'; message: string };
@@ -73,6 +75,7 @@ export interface DesktopApi {
   readFile(path: string): Promise<FilePreview>;
   saveFile(path: string, content: string, expectedContent: string): Promise<FilePreview>;
   createEntry(path: string, directory: boolean): Promise<WorkspaceSnapshot>;
+  deleteEntry(path: string, directory: boolean): Promise<WorkspaceSnapshot | null>;
   confirmDiscard(): Promise<boolean>;
   reportDirty(paths: string[]): Promise<void>;
   startAgent(request: AgentRequest): Promise<void>;
