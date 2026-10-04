@@ -7,9 +7,11 @@ import { filesystemTools } from './tools/filesystem';
 import { ToolRegistry } from './tools/registry';
 import { workspaceSearchTools } from './tools/search';
 import { shellTools } from './tools/shell';
+import { gitInspectionTools } from './tools/git';
+import { diagnosticTools } from './tools/diagnostics';
 import type { ApproveAgentChange } from './tools/types';
 
-const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...shellTools]);
+const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools]);
 
 export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: EmitAgentEvent, approveWrite: ApproveAgentChange = async () => false, apiKey?: string): Promise<void> {
   const send = scopedEmitter(request.runId, emit);

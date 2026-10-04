@@ -61,7 +61,7 @@ async function requestWriteApproval(runId: string, change: ApprovalTarget, tool:
       path: change.path,
       before: change.before,
       after: change.after,
-      diff: tool === 'run_command' ? undefined : buildActionDiff(change as AgentFileChange | AgentPathChange),
+      diff: tool === 'run_command' || tool === 'run_diagnostics' ? undefined : buildActionDiff(change as AgentFileChange | AgentPathChange),
       details: 'details' in change ? change.details : undefined,
       allowAlways
     };
