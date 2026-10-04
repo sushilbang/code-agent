@@ -12,6 +12,9 @@ import { filesystemTools } from '../dist-electron/electron/agent/tools/filesyste
 import { ToolRegistry } from '../dist-electron/electron/agent/tools/registry.js';
 import { workspaceSearchTools } from '../dist-electron/electron/agent/tools/search.js';
 import { shellTools } from '../dist-electron/electron/agent/tools/shell.js';
+import { gitInspectionTools } from '../dist-electron/electron/agent/tools/git.js';
+import { diagnosticTools } from '../dist-electron/electron/agent/tools/diagnostics.js';
+import { runBoundedProcess } from '../dist-electron/electron/agent/tools/process.js';
 import { applyPatch } from 'diff';
 
 async function fixture(run) {
@@ -158,6 +161,88 @@ test('command tool enforces timeout and truncates output', async () => fixture(a
   assert.equal(truncated.success, true);
   assert.match(truncated.content, /\[output truncated\]/);
   assert.ok(truncated.content.length < 40100);
+}));
+
+async function git(root, args) {
+  const result = await runBoundedProcess({
+    executable: 'git', args, cwd: root, signal: new AbortController().signal, timeoutMs: 5000
+  });
+  assert.equal(result.success, true, result.output);
+}
+
+test('Git inspection reports structured status and bounded staged or unstaged diffs', async () => fixture(async root => {
+  await git(root, ['init']);
+  const registry = new ToolRegistry(gitInspectionTools);
+  const context = { root, signal: new AbortController().signal, approveWrite: async () => false, fileChanged() {}, toolOutput() {} };
+  const unborn = JSON.parse((await registry.prepare('git_status', '{}').execute(context)).content);
+  assert.equal(unborn.clean, true);
+  assert.match(unborn.branch, /No commits yet/);
+  await writeFile(path.join(root, 'tracked.txt'), 'before\n');
+  await git(root, ['add', 'tracked.txt']);
+  await git(root, ['-c', 'user.name=Code Agent Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'fixture']);
+  const clean = JSON.parse((await registry.prepare('git_status', '{}').execute(context)).content);
+  assert.equal(clean.clean, true);
+  await writeFile(path.join(root, 'tracked.txt'), `after\n${'x'.repeat(50000)}`);
+  await writeFile(path.join(root, 'new.txt'), 'new\n');
+
+  const status = await registry.prepare('git_status', '{}').execute(context);
+  const parsed = JSON.parse(status.content);
+  assert.equal(parsed.clean, false);
+  assert.match(parsed.branch, /master|main/);
+  assert.ok(parsed.entries.some(entry => entry.path === 'tracked.txt' && entry.status.includes('M')));
+  assert.ok(parsed.entries.some(entry => entry.path === 'new.txt' && entry.status === '??'));
+
+  const unstaged = await registry.prepare('git_diff', '{}').execute(context);
+  assert.equal(unstaged.success, true);
+  assert.match(unstaged.content, /tracked\.txt/);
+  assert.match(unstaged.content, /\[diff truncated\]/);
+  await git(root, ['add', 'tracked.txt']);
+  const staged = await registry.prepare('git_diff', '{"staged":true,"path":"tracked.txt"}').execute(context);
+  assert.match(staged.content, /tracked\.txt/);
+  await assert.rejects(registry.prepare('git_diff', '{"path":"../outside"}').execute(context), /outside the workspace/);
+}));
+
+test('Git inspection handles non-repositories, cancellation, and a missing executable', async () => fixture(async root => {
+  const registry = new ToolRegistry(gitInspectionTools);
+  const context = { root, signal: new AbortController().signal, approveWrite: async () => false, fileChanged() {}, toolOutput() {} };
+  await assert.rejects(registry.prepare('git_status', '{}').execute(context), /not a Git repository/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(registry.prepare('git_status', '{}').execute({ ...context, signal: controller.signal }), /abort/i);
+  await assert.rejects(runBoundedProcess({
+    executable: 'code-agent-command-that-does-not-exist', args: [], cwd: root,
+    signal: new AbortController().signal, timeoutMs: 1000
+  }), /ENOENT|not found/i);
+}));
+
+test('diagnostics only run approved allowlisted package scripts and summarize failures', async () => fixture(async root => {
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: {
+    test: 'node -e "console.log(\'diagnostic ok\')"',
+    lint: 'node -e "console.error(\'error: diagnostic failed\'); process.exit(1)"',
+    unsafe: 'node -e "console.log(\'unsafe\')"'
+  } }));
+  const registry = new ToolRegistry(diagnosticTools);
+  const streamed = [];
+  let approval;
+  const context = {
+    root, signal: new AbortController().signal, fileChanged() {}, toolOutput: chunk => streamed.push(chunk),
+    approveWrite: async (change, tool, _signal, allowAlways) => { approval = { change, tool, allowAlways }; return true; }
+  };
+  const passed = await registry.prepare('run_diagnostics', '{"script":"test"}').execute(context);
+  assert.equal(passed.success, true);
+  assert.match(passed.content, /Status: passed/);
+  assert.match(streamed.join(''), /diagnostic ok/);
+  assert.equal(approval.tool, 'run_diagnostics');
+  assert.equal(approval.allowAlways, false);
+
+  const failed = await registry.prepare('run_diagnostics', '{"script":"lint"}').execute(context);
+  assert.equal(failed.success, false);
+  assert.match(failed.content, /Status: failed/);
+  assert.match(failed.content, /Issue lines: [1-9]/);
+  const denied = await registry.prepare('run_diagnostics', '{"script":"test"}').execute({ ...context, approveWrite: async () => false });
+  assert.deepEqual(denied, { success: false, content: 'Diagnostics were not approved.' });
+  await assert.rejects(registry.prepare('run_diagnostics', '{"script":"unsafe"}').execute(context), /Choose a diagnostic script/);
+  await assert.rejects(registry.prepare('run_diagnostics', '{"script":"build"}').execute(context), /does not define a build script/);
 }));
 
 test('create file and folder, then save without overwriting external changes', async () => fixture(async root => {
