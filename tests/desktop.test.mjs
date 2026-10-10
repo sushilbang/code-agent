@@ -16,7 +16,8 @@ import { gitInspectionTools } from '../dist-electron/electron/agent/tools/git.js
 import { diagnosticTools } from '../dist-electron/electron/agent/tools/diagnostics.js';
 import { runBoundedProcess } from '../dist-electron/electron/agent/tools/process.js';
 import { applyPatch } from 'diff';
-import { DEFAULT_CONTEXT_SETTINGS, contextLevel, estimateRequestTokens, estimateTextTokens, isContextSettings } from '../dist-electron/shared/context.js';
+import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, contextLevel, estimateRequestTokens, estimateTextTokens, isContextSettings } from '../dist-electron/shared/context.js';
+import { createContextCheckpoint } from '../dist-electron/electron/agent/context.js';
 
 async function fixture(run) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'code-agent-test-'));
@@ -45,6 +46,12 @@ test('context estimates grow with request content and thresholds are validated',
   assert.equal(contextLevel({ inputTokens: 83_999, source: 'estimate' }, DEFAULT_CONTEXT_SETTINGS), 'normal');
   assert.equal(contextLevel({ inputTokens: 84_000, source: 'api' }, DEFAULT_CONTEXT_SETTINGS), 'warning');
   assert.equal(contextLevel({ inputTokens: 108_000, source: 'api' }, DEFAULT_CONTEXT_SETTINGS), 'compaction-target');
+  assert.equal(compactionThreshold(DEFAULT_CONTEXT_SETTINGS), 108_000);
+  assert.equal(compactionThreshold({ workingBudgetTokens: 80_000, warningPercent: 65, compactionPercent: 85 }), 68_000);
+  const checkpoint = createContextCheckpoint({ runId: 'one', provider: 'openai', model: 'test', prompt: 'Current task', selectedFile: 'src/main.ts',
+    history: [{ role: 'user', content: 'Initial task' }, { role: 'assistant', content: 'Working' }, { role: 'user', content: 'Updated constraint' }] }, ['src/main.ts', 'src/main.ts', 'README.md'], '2026-10-10T00:00:00.000Z');
+  assert.deepEqual(checkpoint, { at: '2026-10-10T00:00:00.000Z', recentRequests: ['Initial task', 'Updated constraint', 'Current task'],
+    selectedFile: 'src/main.ts', toolPaths: ['src/main.ts', 'README.md'] });
 });
 
 test('preview reads text and refuses binary and traversal', async () => fixture(async root => {
@@ -90,6 +97,13 @@ test('OpenAI stream parsing respects cancellation', async () => {
   controller.abort();
   const stream = new ReadableStream({ start(target) { target.close(); } });
   await assert.rejects(readResponseStream(stream, controller.signal, () => {}, () => {}), /Stopped/);
+});
+
+test('incomplete compaction stream cannot produce a completed checkpoint', async () => {
+  const payload = 'data: {"type":"response.created","response":{"id":"unfinished"}}\n\n' +
+    'data: {"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":"opaque"}}\n\n';
+  const stream = new ReadableStream({ start(target) { target.enqueue(new TextEncoder().encode(payload)); target.close(); } });
+  await assert.rejects(readResponseStream(stream, new AbortController().signal, () => {}, () => {}), /before completion/);
 });
 
 test('glob and text search are bounded to safe workspace files', async () => fixture(async root => {
@@ -304,12 +318,54 @@ test('OpenAI stream exposes only returned reasoning summary and tool activity', 
     assert.ok(events[5].usage.inputTokens > 321);
     assert.deepEqual(events[7].usage, { inputTokens: 415, outputTokens: 18, source: 'api' });
     assert.deepEqual(requests[0].reasoning, { summary: 'auto' });
+    assert.deepEqual(requests[0].context_management, [{ type: 'compaction', compact_threshold: 108_000 }]);
+    assert.deepEqual(requests[1].context_management, requests[0].context_management);
     assert.equal(requests[1].previous_response_id, 'resp_1');
   } finally {
     globalThis.fetch = oldFetch;
     if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = oldKey;
   }
+}));
+
+test('compaction emits a visible checkpoint and preserves provider continuation', async () => fixture(async root => {
+  await writeFile(path.join(root, 'task.txt'), 'A'.repeat(1000));
+  const oldFetch = globalThis.fetch;
+  const streams = [
+    [{ type: 'response.created', response: { id: 'first' } },
+      { type: 'response.output_item.done', item: { type: 'function_call', call_id: 'read_one', name: 'read_file', arguments: '{"path":"task.txt"}' } },
+      { type: 'response.completed', response: { id: 'first', usage: { input_tokens: 100, output_tokens: 10 } } }],
+    [{ type: 'response.created', response: { id: 'second' } },
+      { type: 'response.output_item.done', item: { type: 'compaction', encrypted_content: 'opaque-provider-state' } },
+      { type: 'response.output_item.done', item: { type: 'function_call', call_id: 'read_two', name: 'read_file', arguments: '{"path":"task.txt"}' } },
+      { type: 'response.completed', response: { id: 'second', usage: { input_tokens: 900, output_tokens: 20 } } }],
+    [{ type: 'response.created', response: { id: 'third' } },
+      { type: 'response.output_text.delta', delta: 'Done.' },
+      { type: 'response.completed', response: { id: 'third', usage: { input_tokens: 120, output_tokens: 5 } } }]
+  ];
+  const requests = [];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return new Response(streams.shift().map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n');
+  };
+  try {
+    const events = [];
+    const settings = { workingBudgetTokens: 16_000, warningPercent: 60, compactionPercent: 80 };
+    await runAgent(root, { runId: 'compact', prompt: 'Follow this constraint', provider: 'openai', model: 'test-model', selectedFile: 'task.txt' },
+      new AbortController().signal, event => events.push(event), async () => false, 'test-key', settings);
+    assert.equal(requests.length, 3);
+    assert.ok(requests.every(request => request.context_management[0].compact_threshold === 12_800));
+    assert.equal(requests[1].previous_response_id, 'first');
+    assert.equal(requests[2].previous_response_id, 'second');
+    assert.equal(requests[2].input[0].call_id, 'read_two');
+    const checkpoints = events.filter(event => event.type === 'context-compacted');
+    assert.equal(checkpoints.length, 1);
+    assert.deepEqual(checkpoints[0].checkpoint.recentRequests, ['Follow this constraint']);
+    assert.deepEqual(checkpoints[0].checkpoint.toolPaths, ['task.txt']);
+    assert.equal(JSON.stringify(events).includes('opaque-provider-state'), false);
+    assert.deepEqual(events.filter(event => event.type === 'context-usage' && event.usage.source === 'api').map(event => event.usage.inputTokens), [100, 900, 120]);
+    assert.equal(events.at(-1).type, 'done');
+  } finally { globalThis.fetch = oldFetch; }
 }));
 
 test('agent write plans respect expected content and stay in the workspace', async () => fixture(async root => {
@@ -417,7 +473,8 @@ test('agent folder and file actions create, validate, and delete safely', async 
 test('local chats and per-workspace permissions persist and can be removed', async () => fixture(async root => {
   const store = new LocalStore(path.join(root, 'app-data'));
   const chat = { id: '12345678-1234-1234-1234-123456789abc', title: 'Edit example', workspaceRoot: root,
-    updatedAt: '2026-10-02T10:00:00.000Z', contextUsage: { inputTokens: 415, outputTokens: 18, source: 'api' }, messages: [
+    updatedAt: '2026-10-02T10:00:00.000Z', contextUsage: { inputTokens: 415, outputTokens: 18, source: 'api' },
+    contextCheckpoints: [{ at: '2026-10-10T00:00:00.000Z', recentRequests: ['Edit example'], toolPaths: ['example.ts'] }], messages: [
       { id: 'one', role: 'user', text: 'Edit example' },
       { id: 'two', role: 'assistant', text: 'Updated.', tools: [{ id: 'write', name: 'write_file', path: 'example.ts', description: 'Writing example.ts', success: true, diff: '@@ -1 +1 @@\n-old\n+new' }] }
     ] };
@@ -425,6 +482,8 @@ test('local chats and per-workspace permissions persist and can be removed', asy
   assert.equal((await store.listChats())[0].title, chat.title);
   assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).messages, chat.messages);
   assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).contextUsage, chat.contextUsage);
+  assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).contextCheckpoints, chat.contextCheckpoints);
+  await assert.rejects(store.saveChat({ ...chat, contextCheckpoints: [{ ...chat.contextCheckpoints[0], recentRequests: ['x'.repeat(501)] }] }), /Invalid chat record/);
   await store.allowAction(root, 'write_file');
   assert.deepEqual(await store.allowedActions(root), ['write_file']);
   assert.deepEqual(await store.allowedActions(path.join(root, 'other')), []);

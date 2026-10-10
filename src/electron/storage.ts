@@ -53,7 +53,14 @@ export class LocalStore {
         !['user', 'assistant'].includes(message.role) || typeof message.text !== 'string') ||
       (chat.contextUsage !== undefined && (!chat.contextUsage || !Number.isSafeInteger(chat.contextUsage.inputTokens) ||
         chat.contextUsage.inputTokens < 0 || !['estimate', 'api'].includes(chat.contextUsage.source) ||
-        (chat.contextUsage.outputTokens !== undefined && (!Number.isSafeInteger(chat.contextUsage.outputTokens) || chat.contextUsage.outputTokens < 0))))) {
+        (chat.contextUsage.outputTokens !== undefined && (!Number.isSafeInteger(chat.contextUsage.outputTokens) || chat.contextUsage.outputTokens < 0)))) ||
+      (chat.contextCheckpoints !== undefined && (!Array.isArray(chat.contextCheckpoints) || chat.contextCheckpoints.length > 10 ||
+        chat.contextCheckpoints.some(checkpoint => !checkpoint || typeof checkpoint.at !== 'string' ||
+          !Array.isArray(checkpoint.recentRequests) || checkpoint.recentRequests.length > 3 ||
+          checkpoint.recentRequests.some(text => typeof text !== 'string' || text.length > 500) ||
+          (checkpoint.selectedFile !== undefined && (typeof checkpoint.selectedFile !== 'string' || checkpoint.selectedFile.length > 1000)) ||
+          !Array.isArray(checkpoint.toolPaths) || checkpoint.toolPaths.length > 8 ||
+          checkpoint.toolPaths.some(item => typeof item !== 'string' || item.length > 1000))))) {
       throw new Error('Invalid chat record.');
     }
     await this.serialized(async () => {

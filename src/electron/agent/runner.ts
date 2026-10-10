@@ -1,8 +1,9 @@
-import type { AgentRequest, ContextUsage } from '../../shared/types';
-import { estimateRequestTokens, estimateTextTokens } from '../../shared/context';
+import type { AgentRequest, ContextSettings, ContextUsage } from '../../shared/types';
+import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, estimateRequestTokens, estimateTextTokens } from '../../shared/context';
 import { listFiles } from '../workspace';
 import { errorMessage, scopedEmitter, type EmitAgentEvent } from './events';
 import { agentInstructions } from './instructions';
+import { createContextCheckpoint } from './context';
 import { requestOpenAITurn } from './providers/openai';
 import { filesystemTools } from './tools/filesystem';
 import { ToolRegistry } from './tools/registry';
@@ -14,7 +15,7 @@ import type { ApproveAgentChange } from './tools/types';
 
 const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools]);
 
-export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: EmitAgentEvent, approveWrite: ApproveAgentChange = async () => false, apiKey?: string): Promise<void> {
+export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: EmitAgentEvent, approveWrite: ApproveAgentChange = async () => false, apiKey?: string, contextSettings: ContextSettings = DEFAULT_CONTEXT_SETTINGS): Promise<void> {
   const send = scopedEmitter(request.runId, emit);
   try {
     if (request.provider === 'local') {
@@ -32,6 +33,7 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
       ? `Selected file: ${request.selectedFile}\n\n${request.prompt}` : request.prompt }];
     let previousResponseId: string | undefined;
     let previousUsage: ContextUsage | undefined;
+    const toolPaths: string[] = [];
     const tools = registry.definitions();
 
     for (let turn = 0; turn < 30; turn++) {
@@ -42,7 +44,7 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
       send({ type: 'context-usage', usage: { inputTokens: estimated, source: 'estimate' } });
       const response = await requestOpenAITurn({
         apiKey: key, model: request.model.trim(), instructions: agentInstructions,
-        tools, input, previousResponseId, signal,
+        tools, input, previousResponseId, signal, compactThreshold: compactionThreshold(contextSettings),
         onText: text => send({ type: 'delta', text }),
         onReasoning: text => send({ type: 'reasoning', text })
       });
@@ -50,6 +52,7 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
         previousUsage = { inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens, source: 'api' };
         send({ type: 'context-usage', usage: previousUsage });
       } else previousUsage = { inputTokens: estimated, source: 'estimate' };
+      if (response.compacted) send({ type: 'context-compacted', checkpoint: createContextCheckpoint(request, toolPaths) });
       previousResponseId = response.id;
       if (!response.call) {
         if (!response.hadText) throw new Error('OpenAI completed without text or a tool call.');
@@ -61,6 +64,7 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
       let result;
       try {
         const prepared = registry.prepare(call.name, call.arguments);
+        if (prepared.path) toolPaths.push(prepared.path);
         send({ type: 'tool-start', id: call.call_id, name: call.name, path: prepared.path, description: prepared.description });
         result = await prepared.execute({
           root, signal, approveWrite,

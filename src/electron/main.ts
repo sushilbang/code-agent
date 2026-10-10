@@ -291,9 +291,9 @@ ipcMain.handle('agent:start', (event, request: AgentRequest) => {
   const run = { id: request.runId, controller };
   activeRun = run;
   const root = workspaceRoot;
-  void openAIKey().then(key => runAgent(root, request, controller.signal, agentEvent => {
+  void Promise.all([openAIKey(), store.getContextSettings()]).then(([key, contextSettings]) => runAgent(root, request, controller.signal, agentEvent => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', agentEvent);
-  }, (change, tool, signal, allowAlways) => requestWriteApproval(request.runId, change, tool, signal, allowAlways), key || undefined)).catch(error => {
+  }, (change, tool, signal, allowAlways) => requestWriteApproval(request.runId, change, tool, signal, allowAlways), key || undefined, contextSettings)).catch(error => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', { runId: request.runId, type: 'error', message: error instanceof Error ? error.message : String(error) });
   }).finally(() => {
     if (activeRun === run) activeRun = null;

@@ -28,3 +28,7 @@ export function contextLevel(usage: ContextUsage, settings: ContextSettings): 'n
   const percent = usage.inputTokens / settings.workingBudgetTokens * 100;
   return percent >= settings.compactionPercent ? 'compaction-target' : percent >= settings.warningPercent ? 'warning' : 'normal';
 }
+
+export function compactionThreshold(settings: ContextSettings): number {
+  return Math.floor(settings.workingBudgetTokens * settings.compactionPercent / 100);
+}

@@ -48,6 +48,7 @@ export interface ChatRecord {
   updatedAt: string;
   messages: ChatMessage[];
   contextUsage?: ContextUsage;
+  contextCheckpoints?: ContextCheckpoint[];
 }
 export interface ChatSummary { id: string; title: string; workspaceRoot: string; updatedAt: string }
 
@@ -63,6 +64,13 @@ export interface ContextUsage {
   source: 'estimate' | 'api';
 }
 
+export interface ContextCheckpoint {
+  at: string;
+  recentRequests: string[];
+  selectedFile?: string;
+  toolPaths: string[];
+}
+
 export type AgentEvent =
   | { runId: string; type: 'delta'; text: string }
   | { runId: string; type: 'reasoning'; text: string }
@@ -70,6 +78,7 @@ export type AgentEvent =
   | { runId: string; type: 'tool-result'; id: string; success: boolean; content: string; diff?: string }
   | { runId: string; type: 'tool-output'; id: string; content: string }
   | { runId: string; type: 'context-usage'; usage: ContextUsage }
+  | { runId: string; type: 'context-compacted'; checkpoint: ContextCheckpoint }
   | { runId: string; type: 'file-changed'; path: string; deleted?: boolean; directory?: boolean }
   | { runId: string; type: 'done' }
   | { runId: string; type: 'error'; message: string };
