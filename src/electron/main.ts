@@ -2,12 +2,13 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage } from 'electron';
-import type { AgentApprovalRequest, AgentRequest, ApprovalDecision, ChatRecord } from '../shared/types';
+import type { AgentApprovalRequest, AgentRequest, ApprovalDecision, ChatRecord, ProjectMemoryInput } from '../shared/types';
 import { isContextSettings } from '../shared/context';
 import { DEFAULT_OPENAI_MODEL, isOpenAIModel } from '../shared/models';
 import { runAgent, type ApprovalTarget } from './agent';
 import { buildActionDiff } from './actionDiff';
 import { LocalStore } from './storage';
+import { ProjectMemoryStore } from './projectMemory';
 import { applyAgentPathChange, buildWorkspace, createWorkspaceEntry, planAgentDelete, readPreview, saveWorkspaceFile, type AgentFileChange, type AgentPathChange } from './workspace';
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
@@ -20,6 +21,7 @@ let closeConfirmed = false;
 const pendingApprovals = new Map<string, (decision: ApprovalDecision) => void>();
 const actionNames = new Set(['write_file', 'replace_in_file', 'create_file', 'create_directory', 'delete_file', 'delete_directory']);
 let store: LocalStore;
+let memoryStore: ProjectMemoryStore;
 
 async function savedOpenAIKey(): Promise<string | null> {
   const encrypted = await store.getEncryptedOpenAIKey();
@@ -72,6 +74,7 @@ async function requestWriteApproval(runId: string, change: ApprovalTarget, tool:
 
 app.whenReady().then(async () => {
   store = new LocalStore(app.getPath('userData'));
+  memoryStore = new ProjectMemoryStore(app.getPath('userData'));
   const command = (name: string) => mainWindow?.webContents.send('menu:command', name);
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'File', submenu: [
@@ -245,6 +248,27 @@ ipcMain.handle('chat:delete', (event, id: unknown) => {
   return store.deleteChat(id);
 });
 
+ipcMain.handle('memory:list', event => {
+  checkSender(event);
+  if (!workspaceRoot) return [];
+  return memoryStore.list(workspaceRoot);
+});
+ipcMain.handle('memory:save', (event, input: ProjectMemoryInput) => {
+  checkSender(event);
+  if (!workspaceRoot) throw new Error('Open a repository first.');
+  return memoryStore.save(workspaceRoot, input);
+});
+ipcMain.handle('memory:delete', async (event, id: unknown) => {
+  checkSender(event);
+  if (!workspaceRoot || typeof id !== 'string') throw new Error('Invalid project memory.');
+  const root = workspaceRoot;
+  const memory = (await memoryStore.list(root)).find(item => item.id === id);
+  if (!memory) throw new Error('Project memory not found.');
+  const result = await dialog.showMessageBox(mainWindow!, { type: 'warning', buttons: ['Cancel', 'Delete'], defaultId: 0, cancelId: 0,
+    message: `Delete project memory “${memory.topic}”?`, detail: 'This cannot be undone.', noLink: true });
+  return result.response === 1 ? memoryStore.delete(root, id) : null;
+});
+
 ipcMain.handle('agent:environment', event => {
   checkSender(event);
   return savedOpenAIKey().then(key => ({
@@ -291,9 +315,9 @@ ipcMain.handle('agent:start', (event, request: AgentRequest) => {
   const run = { id: request.runId, controller };
   activeRun = run;
   const root = workspaceRoot;
-  void Promise.all([openAIKey(), store.getContextSettings()]).then(([key, contextSettings]) => runAgent(root, request, controller.signal, agentEvent => {
+  void Promise.all([openAIKey(), store.getContextSettings(), memoryStore.list(root)]).then(([key, contextSettings, memories]) => runAgent(root, request, controller.signal, agentEvent => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', agentEvent);
-  }, (change, tool, signal, allowAlways) => requestWriteApproval(request.runId, change, tool, signal, allowAlways), key || undefined, contextSettings)).catch(error => {
+  }, (change, tool, signal, allowAlways) => requestWriteApproval(request.runId, change, tool, signal, allowAlways), key || undefined, contextSettings, memories)).catch(error => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', { runId: request.runId, type: 'error', message: error instanceof Error ? error.message : String(error) });
   }).finally(() => {
     if (activeRun === run) activeRun = null;

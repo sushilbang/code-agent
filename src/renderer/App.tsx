@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ChevronDown, ChevronRight, Code2, Copy, Eye, EyeOff, FileCode2, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, KeyRound, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Plus, RefreshCw, Save, Settings2, Square, Trash2, X } from 'lucide-react';
+import { ArrowUp, Brain, ChevronDown, ChevronRight, Code2, Copy, Eye, EyeOff, FileCode2, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, KeyRound, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Plus, RefreshCw, Save, Settings2, Square, Trash2, X } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { AgentApprovalRequest, AgentEvent, ApprovalDecision, ChatMessage, ChatSummary, ContextCheckpoint, ContextSettings, ContextUsage, FileNode, WorkspaceSnapshot } from '../shared/types';
@@ -7,6 +7,7 @@ import { DEFAULT_CONTEXT_SETTINGS } from '../shared/context';
 import { DEFAULT_OPENAI_MODEL, isOpenAIModel, OPENAI_MODELS } from '../shared/models';
 import Editor, { type EditorTab } from './Editor';
 import ContextControls from './components/agent/ContextControls';
+import ProjectMemoryPanel from './components/agent/ProjectMemoryPanel';
 
 type Message = ChatMessage;
 
@@ -61,7 +62,7 @@ export default function App() {
   const [chatId, setChatId] = useState<string>(() => crypto.randomUUID());
   const [chatRoot, setChatRoot] = useState<string | null>(null);
   const [recentChats, setRecentChats] = useState<ChatSummary[]>([]);
-  const [sidebarView, setSidebarView] = useState<'chat' | 'recent' | 'permissions'>('chat');
+  const [sidebarView, setSidebarView] = useState<'chat' | 'recent' | 'permissions' | 'memory'>('chat');
   const [allowedActions, setAllowedActions] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
   const [provider, setProvider] = useState<'local' | 'openai'>('local');
@@ -161,6 +162,8 @@ export default function App() {
     } else if (event.type === 'context-files') {
       setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, retrieved: event.sources } : message));
       setStatus(event.sources.length ? `Retrieved ${event.sources.length} file excerpt(s)` : 'No file excerpts retrieved');
+    } else if (event.type === 'context-memory') {
+      setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, memoriesUsed: event.items } : message));
     } else if (event.type === 'file-changed') {
       const root = workspaceRef.current;
       void window.codeAgent.refreshWorkspace().then(snapshot => { if (root === workspaceRef.current) setWorkspace(snapshot); }).catch(error => setStatus(messageOf(error)));
@@ -427,6 +430,7 @@ export default function App() {
         <div className="agent-title"><div><button className="icon-button" title="New chat" disabled={Boolean(runId)} onClick={() => newChat()}><Plus size={16} /></button><strong>Agent</strong></div><div className="agent-controls">
           <button className={`icon-button ${sidebarView === 'recent' ? 'active' : ''}`} title="Recent chats" disabled={Boolean(approval)} onClick={() => setSidebarView(sidebarView === 'recent' ? 'chat' : 'recent')}><History size={16} /></button>
           <button className={`icon-button ${sidebarView === 'permissions' ? 'active' : ''}`} title="Allowed actions" disabled={Boolean(approval)} onClick={() => setSidebarView(sidebarView === 'permissions' ? 'chat' : 'permissions')}><Settings2 size={16} /></button>
+          <button className={`icon-button ${sidebarView === 'memory' ? 'active' : ''}`} title="Project memory" disabled={Boolean(approval)} onClick={() => setSidebarView(sidebarView === 'memory' ? 'chat' : 'memory')}><Brain size={16} /></button>
           <button className={`icon-button ${keyDialog ? 'active' : ''}`} title="API key settings" disabled={Boolean(runId)} onClick={() => setKeyDialog(true)}><KeyRound size={15} /></button>
           <button className="icon-button" title="Collapse agent" aria-label="Collapse agent" onClick={() => setAgentVisible(false)}><PanelRightClose size={15} /></button>
           <select aria-label="Model provider" value={provider} disabled={Boolean(runId)} onChange={event => setProvider(event.target.value as 'local' | 'openai')}><option value="local">Local inspection</option><option value="openai">OpenAI</option></select>
@@ -434,13 +438,14 @@ export default function App() {
         {sidebarView === 'recent' ? <div className="conversation side-list"><div className="side-list-title">Recent chats</div>{recentChats.length ? recentChats.map(chat => <div className="recent-row" key={chat.id}>
           <button onClick={() => void openChat(chat.id)} title={`${chat.workspaceRoot}\n${chat.updatedAt}`}><strong>{chat.title}</strong><span>{chat.workspaceRoot.split(/[\\/]/).at(-1)} · {new Date(chat.updatedAt).toLocaleDateString()}</span></button>
           <button className="icon-button" title={`Delete ${chat.title}`} onClick={() => void deleteChat(chat.id)}><Trash2 size={14} /></button>
-        </div>) : <div className="side-list-empty">No saved chats</div>}</div> : sidebarView === 'permissions' ? <div className="conversation side-list"><div className="side-list-title">Allowed actions</div><div className="side-list-context">{workspace?.name || 'Open a folder'}</div>{allowedActions.length ? allowedActions.map(tool => <div className="permission-row" key={tool}><span>{tool.replaceAll('_', ' ')}</span><button className="icon-button" title={`Revoke ${tool}`} onClick={() => void window.codeAgent.revokeAllowedAction(tool).then(setAllowedActions).catch(error => setStatus(messageOf(error)))}><X size={15} /></button></div>) : <div className="side-list-empty">No actions always allowed in this folder</div>}</div> : <div className="conversation">
+        </div>) : <div className="side-list-empty">No saved chats</div>}</div> : sidebarView === 'permissions' ? <div className="conversation side-list"><div className="side-list-title">Allowed actions</div><div className="side-list-context">{workspace?.name || 'Open a folder'}</div>{allowedActions.length ? allowedActions.map(tool => <div className="permission-row" key={tool}><span>{tool.replaceAll('_', ' ')}</span><button className="icon-button" title={`Revoke ${tool}`} onClick={() => void window.codeAgent.revokeAllowedAction(tool).then(setAllowedActions).catch(error => setStatus(messageOf(error)))}><X size={15} /></button></div>) : <div className="side-list-empty">No actions always allowed in this folder</div>}</div> : sidebarView === 'memory' ? <ProjectMemoryPanel workspaceRoot={workspace?.root} /> : <div className="conversation">
           {!chatMatchesWorkspace && <div className="chat-workspace-notice"><strong>{chatRoot?.split(/[\\/]/).at(-1)}</strong><span>This chat is linked to another folder. Open that folder to continue, or start a new chat here.</span><button onClick={() => void openFolder()}>Open folder</button></div>}
           {messages.length === 0 ? <div className="conversation-empty"><Code2 size={27} strokeWidth={1.5} /><strong>What are we working on?</strong><span>{workspace ? workspace.name : 'Open a repository to begin'}</span></div> : messages.map(message => <div className={`message ${message.role}`} key={message.id}>
             <div className="message-label">{message.role === 'user' ? 'You' : 'Agent'}</div>
             {message.retrieved && <details className="source-block"><summary>On-disk context · {message.retrieved.length} excerpt(s)</summary>
               {message.retrieved.length ? <ul>{message.retrieved.map(source => <li key={`${source.path}:${source.startLine}`}>{source.path}:{source.startLine}–{source.endLine} <small>({source.reason})</small></li>)}</ul> : <p>No automatic file excerpts; the agent can still use search and read tools.</p>}
             </details>}
+            {message.memoriesUsed && <details className="source-block"><summary>Project memory · {message.memoriesUsed.length} item(s)</summary>{message.memoriesUsed.length ? <ul>{message.memoriesUsed.map(item => <li key={item.id}>{item.topic}</li>)}</ul> : <p>No relevant project memory used.</p>}</details>}
             {message.reasoning && <details className="reasoning-block"><summary>Reasoning summary</summary><div>{message.reasoning}</div></details>}
             {message.tools?.map(tool => <details className="tool-step" key={`${tool.id}-${Boolean(tool.diff)}`} open={Boolean(tool.diff)}>
               <summary><FileText size={13} /><span>{tool.name} · {tool.path}</span><small className={tool.success === false ? 'failed' : ''}>{tool.success === undefined ? 'Running' : tool.success ? 'Done' : 'Failed'}</small></summary>

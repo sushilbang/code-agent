@@ -34,6 +34,9 @@ const api: DesktopApi = {
   getChat: id => ipcRenderer.invoke('chat:get', id),
   saveChat: chat => ipcRenderer.invoke('chat:save', chat),
   deleteChat: id => ipcRenderer.invoke('chat:delete', id),
+  listProjectMemories: () => ipcRenderer.invoke('memory:list'),
+  saveProjectMemory: input => ipcRenderer.invoke('memory:save', input),
+  deleteProjectMemory: id => ipcRenderer.invoke('memory:delete', id),
   onMenuCommand: listener => {
     const handler = (_event: Electron.IpcRendererEvent, command: string) => listener(command);
     ipcRenderer.on('menu:command', handler);

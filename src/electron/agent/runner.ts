@@ -1,10 +1,11 @@
-import type { AgentRequest, ContextSettings, ContextUsage } from '../../shared/types';
+import type { AgentRequest, ContextSettings, ContextUsage, ProjectMemory } from '../../shared/types';
 import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, estimateRequestTokens, estimateTextTokens } from '../../shared/context';
 import { listFiles } from '../workspace';
 import { errorMessage, scopedEmitter, type EmitAgentEvent } from './events';
 import { agentInstructions } from './instructions';
 import { createContextCheckpoint } from './context';
 import { formatRetrievedContext, retrievalInstructions, retrieveWorkspaceContext } from './retrieval';
+import { formatProjectMemories, memoryInstructions, selectProjectMemories } from './memory';
 import { requestOpenAITurn } from './providers/openai';
 import { filesystemTools } from './tools/filesystem';
 import { ToolRegistry } from './tools/registry';
@@ -16,7 +17,7 @@ import type { ApproveAgentChange } from './tools/types';
 
 const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools]);
 
-export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: EmitAgentEvent, approveWrite: ApproveAgentChange = async () => false, apiKey?: string, contextSettings: ContextSettings = DEFAULT_CONTEXT_SETTINGS): Promise<void> {
+export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: EmitAgentEvent, approveWrite: ApproveAgentChange = async () => false, apiKey?: string, contextSettings: ContextSettings = DEFAULT_CONTEXT_SETTINGS, memories: ProjectMemory[] = []): Promise<void> {
   const send = scopedEmitter(request.runId, emit);
   try {
     if (request.provider === 'local') {
@@ -32,13 +33,15 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
     if (!request.model.trim()) throw new Error('Choose a model.');
     const snippets = await retrieveWorkspaceContext(root, request.prompt, request.selectedFile, signal);
     send({ type: 'context-files', sources: snippets.map(({ text: _text, ...source }) => source) });
+    const selectedMemories = selectProjectMemories(memories, request.prompt);
+    send({ type: 'context-memory', items: selectedMemories.map(({ id, topic }) => ({ id, topic })) });
     let input: unknown = [...(request.history || []).slice(-12), { role: 'user', content: (request.selectedFile
-      ? `Selected file: ${request.selectedFile}\n\n${request.prompt}` : request.prompt) + formatRetrievedContext(snippets) }];
+      ? `Selected file: ${request.selectedFile}\n\n${request.prompt}` : request.prompt) + formatRetrievedContext(snippets) + formatProjectMemories(selectedMemories) }];
     let previousResponseId: string | undefined;
     let previousUsage: ContextUsage | undefined;
     const toolPaths: string[] = [];
     const tools = registry.definitions();
-    const instructions = `${agentInstructions} ${retrievalInstructions}`;
+    const instructions = `${agentInstructions} ${retrievalInstructions} ${memoryInstructions}`;
 
     for (let turn = 0; turn < 30; turn++) {
       if (signal.aborted) throw new Error('Stopped');

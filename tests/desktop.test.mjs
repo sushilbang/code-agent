@@ -84,6 +84,7 @@ test('retrieval ranks current on-disk context with bounded path and line provena
 test('retrieval excludes sensitive, oversized, and binary files and honors cancellation', async () => fixture(async root => {
   await writeFile(path.join(root, 'auth.ts'), 'export const authenticate = true;\n');
   await writeFile(path.join(root, 'credentials.json'), '{"authenticate":"secret"}');
+  await writeFile(path.join(root, 'memories.json'), '{"authenticate":"private project fact"}');
   await writeFile(path.join(root, 'huge.ts'), 'authenticate'.repeat(11_000));
   await writeFile(path.join(root, 'binary.ts'), Buffer.from([0, 1, 2]));
   const sources = await retrieveWorkspaceContext(root, 'authenticate', undefined, new AbortController().signal);
@@ -347,7 +348,9 @@ test('OpenAI stream exposes only returned reasoning summary and tool activity', 
   try {
     const events = [];
     await runAgent(root, { runId: 'stream', prompt: 'Inspect server.js', provider: 'openai', model: 'test-model' }, new AbortController().signal, event => events.push(event));
-    assert.deepEqual(events.map(event => event.type), ['context-files', 'context-usage', 'reasoning', 'context-usage', 'tool-start', 'tool-result', 'context-usage', 'delta', 'context-usage', 'done']);
+    assert.deepEqual(events.filter(event => event.type !== 'context-memory').map(event => event.type), ['context-files', 'context-usage', 'reasoning', 'context-usage', 'tool-start', 'tool-result', 'context-usage', 'delta', 'context-usage', 'done']);
+    assert.deepEqual(events.find(event => event.type === 'context-memory').items, []);
+    events.splice(1, 1);
     assert.deepEqual(events[0].sources.map(source => source.path), ['server.js']);
     assert.equal(events[1].usage.source, 'estimate');
     assert.deepEqual(events[3].usage, { inputTokens: 321, outputTokens: 22, source: 'api' });

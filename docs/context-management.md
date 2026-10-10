@@ -21,4 +21,4 @@ Measure actual usage where available. The [Responses API](https://developers.ope
 
 ## Next milestone
 
-Add task-relevant file retrieval and a durable, reviewable project memory layer with provenance and user controls. Before claiming reliable retention across compaction, evaluate long tool-result sequences, changing constraints, and restart behavior with real model runs; mocked stream tests only verify wiring and state handling.
+Task-relevant file retrieval and a manually curated durable project-memory layer are now implemented; see [retrieval.md](retrieval.md) and [project-memory.md](project-memory.md). Before claiming reliable retention across compaction, evaluate long tool-result sequences, changing constraints, and restart behavior with real model runs; mocked stream tests only verify wiring and state handling.

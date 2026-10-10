@@ -41,7 +41,19 @@ export interface ChatMessage {
   tools?: { id: string; name: string; path: string; description: string; success?: boolean; content?: string; diff?: string }[];
   error?: boolean;
   retrieved?: RetrievedSource[];
+  memoriesUsed?: { id: string; topic: string }[];
 }
+export interface ProjectMemory {
+  id: string;
+  workspaceRoot: string;
+  topic: string;
+  value: string;
+  source: { kind: 'user' | 'file'; reference?: string };
+  createdAt: string;
+  updatedAt: string;
+  enabled: boolean;
+}
+export type ProjectMemoryInput = Pick<ProjectMemory, 'topic' | 'value' | 'source' | 'enabled'> & { id?: string };
 export interface RetrievedSource {
   path: string;
   startLine: number;
@@ -87,6 +99,7 @@ export type AgentEvent =
   | { runId: string; type: 'context-usage'; usage: ContextUsage }
   | { runId: string; type: 'context-compacted'; checkpoint: ContextCheckpoint }
   | { runId: string; type: 'context-files'; sources: RetrievedSource[] }
+  | { runId: string; type: 'context-memory'; items: { id: string; topic: string }[] }
   | { runId: string; type: 'file-changed'; path: string; deleted?: boolean; directory?: boolean }
   | { runId: string; type: 'done' }
   | { runId: string; type: 'error'; message: string };
@@ -120,6 +133,9 @@ export interface DesktopApi {
   getChat(id: string): Promise<ChatRecord | null>;
   saveChat(chat: ChatRecord): Promise<void>;
   deleteChat(id: string): Promise<void>;
+  listProjectMemories(): Promise<ProjectMemory[]>;
+  saveProjectMemory(input: ProjectMemoryInput): Promise<ProjectMemory[]>;
+  deleteProjectMemory(id: string): Promise<ProjectMemory[] | null>;
   onMenuCommand(listener: (command: string) => void): () => void;
   getEnvironment(): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' | 'environment' | 'none'; defaultModel: string }>;
   saveOpenAIKey(key: string): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' }>;

@@ -54,7 +54,9 @@ export class LocalStore {
         (message.retrieved !== undefined && (!Array.isArray(message.retrieved) || message.retrieved.length > 4 ||
           message.retrieved.some(source => !source || typeof source.path !== 'string' || source.path.length > 1000 ||
             !Number.isSafeInteger(source.startLine) || source.startLine < 1 || !Number.isSafeInteger(source.endLine) || source.endLine < source.startLine ||
-            !['selected', 'path', 'content'].includes(source.reason))))) ||
+            !['selected', 'path', 'content'].includes(source.reason)))) ||
+        (message.memoriesUsed !== undefined && (!Array.isArray(message.memoriesUsed) || message.memoriesUsed.length > 6 ||
+          message.memoriesUsed.some(item => !item || typeof item.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(item.id) || typeof item.topic !== 'string' || item.topic.length > 80)))) ||
       (chat.contextUsage !== undefined && (!chat.contextUsage || !Number.isSafeInteger(chat.contextUsage.inputTokens) ||
         chat.contextUsage.inputTokens < 0 || !['estimate', 'api'].includes(chat.contextUsage.source) ||
         (chat.contextUsage.outputTokens !== undefined && (!Number.isSafeInteger(chat.contextUsage.outputTokens) || chat.contextUsage.outputTokens < 0)))) ||

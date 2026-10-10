@@ -167,6 +167,24 @@ button:disabled{cursor:default;opacity:.48}
 .side-list-title{font-size:12px;font-weight:700;color:#e1e8e8;padding:4px 9px 10px}
 .side-list-context{font-size:11px;color:#92a7a9;padding:0 9px 10px;overflow:hidden;text-overflow:ellipsis}
 .side-list-empty{font-size:12px;color:#899a9c;padding:10px}
+.memory-panel{background:#000;color:#e1e8e8}
+.memory-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.memory-heading button,.memory-actions button{border:1px solid #45555a;border-radius:4px;background:#172126;color:#e1e8e8;padding:5px 9px;cursor:pointer}
+.memory-heading button:disabled,.memory-actions button:disabled{opacity:.45;cursor:default}
+.memory-help{font-size:11px;line-height:1.5;color:#98a9ac;margin:2px 9px 14px}
+.memory-error{font-size:11px;color:#ff9d94;margin:7px 9px}
+.memory-form,.memory-item{border:1px solid #263338;border-radius:6px;padding:10px;margin:8px 5px;background:#080c0d}
+.memory-form label{display:block;font-size:11px;color:#b9c9ca;margin-bottom:9px}
+.memory-form input:not([type=checkbox]),.memory-form textarea,.memory-form select{display:block;width:100%;margin-top:4px;padding:7px;border:1px solid #45555a;border-radius:4px;background:#11191c;color:#eaf1f1;font-size:12px}
+.memory-form textarea{min-height:78px;resize:vertical}
+.memory-form .memory-check{display:flex;align-items:center;gap:7px}
+.memory-item-title{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.memory-item-title label{white-space:nowrap;color:#a4b8b6;font-size:11px}
+.memory-item p{font-size:12px;line-height:1.45;overflow-wrap:anywhere;white-space:pre-wrap;margin:7px 0}
+.memory-item small{display:block;color:#91a5a4;font-size:10px;overflow-wrap:anywhere}
+.memory-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:10px}
+.memory-actions button.primary{background:#236757;border-color:#358673}
+.memory-actions button.danger{color:#f2a6a0}
 .recent-row,.permission-row{display:flex;align-items:center;min-width:0;gap:4px;border-bottom:1px solid #2d383d}
 .recent-row:hover,.permission-row:hover{background:#243037}
 .recent-row>button:first-child{flex:1;min-width:0;display:flex;flex-direction:column;align-items:start;gap:4px;background:none;border:0;color:#dce7e7;text-align:left;padding:10px 8px}

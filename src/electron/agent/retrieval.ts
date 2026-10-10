@@ -21,7 +21,7 @@ function termsFor(prompt: string): string[] {
 
 function safeAutomaticPath(file: string): boolean {
   const name = path.posix.basename(file).toLowerCase();
-  return !/(^\.env($|\.)|^\.npmrc$|^\.pypirc$|secret|credential|password|token|\.pem$|\.key$|\.p12$|\.pfx$|\.lock$|\.map$)/i.test(name);
+  return !/(^\.env($|\.)|^\.npmrc$|^\.pypirc$|^(chats|settings|permissions|memories)\.json$|secret|credential|password|token|\.pem$|\.key$|\.p12$|\.pfx$|\.lock$|\.map$)/i.test(name);
 }
 
 function pathScore(file: string, terms: string[], prompt: string): number {
