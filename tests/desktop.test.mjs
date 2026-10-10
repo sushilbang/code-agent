@@ -18,6 +18,7 @@ import { runBoundedProcess } from '../dist-electron/electron/agent/tools/process
 import { applyPatch } from 'diff';
 import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, contextLevel, estimateRequestTokens, estimateTextTokens, isContextSettings } from '../dist-electron/shared/context.js';
 import { createContextCheckpoint } from '../dist-electron/electron/agent/context.js';
+import { formatRetrievedContext, retrieveWorkspaceContext } from '../dist-electron/electron/agent/retrieval.js';
 
 async function fixture(run) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'code-agent-test-'));
@@ -53,6 +54,43 @@ test('context estimates grow with request content and thresholds are validated',
   assert.deepEqual(checkpoint, { at: '2026-10-10T00:00:00.000Z', recentRequests: ['Initial task', 'Updated constraint', 'Current task'],
     selectedFile: 'src/main.ts', toolPaths: ['src/main.ts', 'README.md'] });
 });
+
+test('retrieval ranks current on-disk context with bounded path and line provenance', async () => fixture(async root => {
+  await mkdir(path.join(root, 'src'));
+  await mkdir(path.join(root, 'node_modules'));
+  await writeFile(path.join(root, 'src', 'billing.ts'), 'export function charge() {\n  return "current billing flow";\n}\n');
+  await writeFile(path.join(root, 'src', 'service.ts'), 'export const billingHandler = "secondary";\n');
+  await writeFile(path.join(root, 'src', '.env.local'), 'BILLING_SECRET=never-send');
+  await writeFile(path.join(root, 'node_modules', 'billing.ts'), 'never-send dependency');
+  await writeFile(path.join(root, 'src', 'billing.pem'), 'never-send certificate');
+  const sources = await retrieveWorkspaceContext(root, 'Where is billing handled?', 'src/billing.ts', new AbortController().signal);
+  assert.equal(sources[0].path, 'src/billing.ts');
+  assert.equal(sources[0].reason, 'selected');
+  assert.equal(sources[0].startLine, 1);
+  assert.match(sources[0].text, /\[L2\].*current billing flow/);
+  assert.ok(sources.some(source => source.path === 'src/service.ts'));
+  assert.ok(sources.every(source => !source.path.includes('.env') && !source.path.includes('node_modules') && !source.path.endsWith('.pem')));
+  const ignoredSelection = await retrieveWorkspaceContext(root, 'billing', 'node_modules/billing.ts', new AbortController().signal);
+  assert.ok(ignoredSelection.every(source => !source.path.includes('node_modules')));
+  assert.ok(sources.length <= 4 && sources.every(source => source.text.length <= 2500));
+  assert.ok(formatRetrievedContext(sources).length < 13_000);
+  assert.match(formatRetrievedContext(sources), /src\/billing.ts/);
+  await writeFile(path.join(root, 'src', 'billing.ts'), 'export const billing = "updated on disk";\n');
+  const updated = await retrieveWorkspaceContext(root, 'billing', 'src/billing.ts', new AbortController().signal);
+  assert.match(updated[0].text, /updated on disk/);
+  assert.doesNotMatch(updated[0].text, /current billing flow/);
+}));
+
+test('retrieval excludes sensitive, oversized, and binary files and honors cancellation', async () => fixture(async root => {
+  await writeFile(path.join(root, 'auth.ts'), 'export const authenticate = true;\n');
+  await writeFile(path.join(root, 'credentials.json'), '{"authenticate":"secret"}');
+  await writeFile(path.join(root, 'huge.ts'), 'authenticate'.repeat(11_000));
+  await writeFile(path.join(root, 'binary.ts'), Buffer.from([0, 1, 2]));
+  const sources = await retrieveWorkspaceContext(root, 'authenticate', undefined, new AbortController().signal);
+  assert.deepEqual(sources.map(source => source.path), ['auth.ts']);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(retrieveWorkspaceContext(root, 'authenticate', undefined, controller.signal), /abort/i);
+}));
 
 test('preview reads text and refuses binary and traversal', async () => fixture(async root => {
   await writeFile(path.join(root, 'hello.ts'), 'one\ntwo');
@@ -309,18 +347,21 @@ test('OpenAI stream exposes only returned reasoning summary and tool activity', 
   try {
     const events = [];
     await runAgent(root, { runId: 'stream', prompt: 'Inspect server.js', provider: 'openai', model: 'test-model' }, new AbortController().signal, event => events.push(event));
-    assert.deepEqual(events.map(event => event.type), ['context-usage', 'reasoning', 'context-usage', 'tool-start', 'tool-result', 'context-usage', 'delta', 'context-usage', 'done']);
-    assert.equal(events[0].usage.source, 'estimate');
-    assert.deepEqual(events[2].usage, { inputTokens: 321, outputTokens: 22, source: 'api' });
-    assert.equal(events[1].text, 'I should inspect the file.');
-    assert.equal(events[3].description, 'Reading server.js');
-    assert.match(events[4].content, /server = true/);
-    assert.ok(events[5].usage.inputTokens > 321);
-    assert.deepEqual(events[7].usage, { inputTokens: 415, outputTokens: 18, source: 'api' });
+    assert.deepEqual(events.map(event => event.type), ['context-files', 'context-usage', 'reasoning', 'context-usage', 'tool-start', 'tool-result', 'context-usage', 'delta', 'context-usage', 'done']);
+    assert.deepEqual(events[0].sources.map(source => source.path), ['server.js']);
+    assert.equal(events[1].usage.source, 'estimate');
+    assert.deepEqual(events[3].usage, { inputTokens: 321, outputTokens: 22, source: 'api' });
+    assert.equal(events[2].text, 'I should inspect the file.');
+    assert.equal(events[4].description, 'Reading server.js');
+    assert.match(events[5].content, /server = true/);
+    assert.ok(events[6].usage.inputTokens > 321);
+    assert.deepEqual(events[8].usage, { inputTokens: 415, outputTokens: 18, source: 'api' });
     assert.deepEqual(requests[0].reasoning, { summary: 'auto' });
     assert.deepEqual(requests[0].context_management, [{ type: 'compaction', compact_threshold: 108_000 }]);
     assert.deepEqual(requests[1].context_management, requests[0].context_management);
     assert.equal(requests[1].previous_response_id, 'resp_1');
+    assert.match(requests[0].input.at(-1).content, /Retrieved workspace excerpts/);
+    assert.match(requests[0].input.at(-1).content, /server = true/);
   } finally {
     globalThis.fetch = oldFetch;
     if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
@@ -476,13 +517,15 @@ test('local chats and per-workspace permissions persist and can be removed', asy
     updatedAt: '2026-10-02T10:00:00.000Z', contextUsage: { inputTokens: 415, outputTokens: 18, source: 'api' },
     contextCheckpoints: [{ at: '2026-10-10T00:00:00.000Z', recentRequests: ['Edit example'], toolPaths: ['example.ts'] }], messages: [
       { id: 'one', role: 'user', text: 'Edit example' },
-      { id: 'two', role: 'assistant', text: 'Updated.', tools: [{ id: 'write', name: 'write_file', path: 'example.ts', description: 'Writing example.ts', success: true, diff: '@@ -1 +1 @@\n-old\n+new' }] }
+      { id: 'two', role: 'assistant', text: 'Updated.', retrieved: [{ path: 'example.ts', startLine: 1, endLine: 3, reason: 'selected' }],
+        tools: [{ id: 'write', name: 'write_file', path: 'example.ts', description: 'Writing example.ts', success: true, diff: '@@ -1 +1 @@\n-old\n+new' }] }
     ] };
   await store.saveChat(chat);
   assert.equal((await store.listChats())[0].title, chat.title);
   assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).messages, chat.messages);
   assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).contextUsage, chat.contextUsage);
   assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).contextCheckpoints, chat.contextCheckpoints);
+  await assert.rejects(store.saveChat({ ...chat, messages: [{ id: 'bad', role: 'assistant', text: '', retrieved: [{ path: 'x', startLine: 0, endLine: 2, reason: 'path' }] }] }), /Invalid chat record/);
   await assert.rejects(store.saveChat({ ...chat, contextCheckpoints: [{ ...chat.contextCheckpoints[0], recentRequests: ['x'.repeat(501)] }] }), /Invalid chat record/);
   await store.allowAction(root, 'write_file');
   assert.deepEqual(await store.allowedActions(root), ['write_file']);

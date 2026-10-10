@@ -158,6 +158,9 @@ export default function App() {
     } else if (event.type === 'context-compacted') {
       setContextCheckpoints(previous => [...previous, event.checkpoint].slice(-10));
       setStatus('Context compacted');
+    } else if (event.type === 'context-files') {
+      setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, retrieved: event.sources } : message));
+      setStatus(event.sources.length ? `Retrieved ${event.sources.length} file excerpt(s)` : 'No file excerpts retrieved');
     } else if (event.type === 'file-changed') {
       const root = workspaceRef.current;
       void window.codeAgent.refreshWorkspace().then(snapshot => { if (root === workspaceRef.current) setWorkspace(snapshot); }).catch(error => setStatus(messageOf(error)));
@@ -435,6 +438,9 @@ export default function App() {
           {!chatMatchesWorkspace && <div className="chat-workspace-notice"><strong>{chatRoot?.split(/[\\/]/).at(-1)}</strong><span>This chat is linked to another folder. Open that folder to continue, or start a new chat here.</span><button onClick={() => void openFolder()}>Open folder</button></div>}
           {messages.length === 0 ? <div className="conversation-empty"><Code2 size={27} strokeWidth={1.5} /><strong>What are we working on?</strong><span>{workspace ? workspace.name : 'Open a repository to begin'}</span></div> : messages.map(message => <div className={`message ${message.role}`} key={message.id}>
             <div className="message-label">{message.role === 'user' ? 'You' : 'Agent'}</div>
+            {message.retrieved && <details className="source-block"><summary>On-disk context · {message.retrieved.length} excerpt(s)</summary>
+              {message.retrieved.length ? <ul>{message.retrieved.map(source => <li key={`${source.path}:${source.startLine}`}>{source.path}:{source.startLine}–{source.endLine} <small>({source.reason})</small></li>)}</ul> : <p>No automatic file excerpts; the agent can still use search and read tools.</p>}
+            </details>}
             {message.reasoning && <details className="reasoning-block"><summary>Reasoning summary</summary><div>{message.reasoning}</div></details>}
             {message.tools?.map(tool => <details className="tool-step" key={`${tool.id}-${Boolean(tool.diff)}`} open={Boolean(tool.diff)}>
               <summary><FileText size={13} /><span>{tool.name} · {tool.path}</span><small className={tool.success === false ? 'failed' : ''}>{tool.success === undefined ? 'Running' : tool.success ? 'Done' : 'Failed'}</small></summary>

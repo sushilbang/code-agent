@@ -50,7 +50,11 @@ export class LocalStore {
       typeof chat.title !== 'string' || typeof chat.workspaceRoot !== 'string' ||
       typeof chat.updatedAt !== 'string' || !Array.isArray(chat.messages) || serialized.length > 5_000_000 ||
       chat.messages.some(message => !message || typeof message.id !== 'string' ||
-        !['user', 'assistant'].includes(message.role) || typeof message.text !== 'string') ||
+        !['user', 'assistant'].includes(message.role) || typeof message.text !== 'string' ||
+        (message.retrieved !== undefined && (!Array.isArray(message.retrieved) || message.retrieved.length > 4 ||
+          message.retrieved.some(source => !source || typeof source.path !== 'string' || source.path.length > 1000 ||
+            !Number.isSafeInteger(source.startLine) || source.startLine < 1 || !Number.isSafeInteger(source.endLine) || source.endLine < source.startLine ||
+            !['selected', 'path', 'content'].includes(source.reason))))) ||
       (chat.contextUsage !== undefined && (!chat.contextUsage || !Number.isSafeInteger(chat.contextUsage.inputTokens) ||
         chat.contextUsage.inputTokens < 0 || !['estimate', 'api'].includes(chat.contextUsage.source) ||
         (chat.contextUsage.outputTokens !== undefined && (!Number.isSafeInteger(chat.contextUsage.outputTokens) || chat.contextUsage.outputTokens < 0)))) ||

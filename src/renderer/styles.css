@@ -135,6 +135,11 @@ button:disabled{cursor:default;opacity:.48}
 .context-checkpoint strong{color:#d6e2e0}
 .context-checkpoint ul{margin:6px 0 8px;padding-left:18px}
 .context-checkpoint li{margin:4px 0}
+.source-block{margin:7px 0;color:#9fb8b3;font-size:11px;overflow-wrap:anywhere}
+.source-block summary{cursor:pointer}
+.source-block ul{margin:5px 0 0;padding-left:18px}
+.source-block li{margin:3px 0}
+.source-block p{margin:5px 0}
 .dialog-actions .danger{border-color:#714747;color:#efb5b5}
 .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:17px}
 .dialog-actions button{padding:7px 12px;border:1px solid #4a5b60;border-radius:5px;background:#2f3b40;color:#e4eded;font-size:12px}

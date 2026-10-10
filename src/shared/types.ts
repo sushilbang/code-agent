@@ -40,6 +40,13 @@ export interface ChatMessage {
   reasoning?: string;
   tools?: { id: string; name: string; path: string; description: string; success?: boolean; content?: string; diff?: string }[];
   error?: boolean;
+  retrieved?: RetrievedSource[];
+}
+export interface RetrievedSource {
+  path: string;
+  startLine: number;
+  endLine: number;
+  reason: 'selected' | 'path' | 'content';
 }
 export interface ChatRecord {
   id: string;
@@ -79,6 +86,7 @@ export type AgentEvent =
   | { runId: string; type: 'tool-output'; id: string; content: string }
   | { runId: string; type: 'context-usage'; usage: ContextUsage }
   | { runId: string; type: 'context-compacted'; checkpoint: ContextCheckpoint }
+  | { runId: string; type: 'context-files'; sources: RetrievedSource[] }
   | { runId: string; type: 'file-changed'; path: string; deleted?: boolean; directory?: boolean }
   | { runId: string; type: 'done' }
   | { runId: string; type: 'error'; message: string };

@@ -4,6 +4,7 @@ import { listFiles } from '../workspace';
 import { errorMessage, scopedEmitter, type EmitAgentEvent } from './events';
 import { agentInstructions } from './instructions';
 import { createContextCheckpoint } from './context';
+import { formatRetrievedContext, retrievalInstructions, retrieveWorkspaceContext } from './retrieval';
 import { requestOpenAITurn } from './providers/openai';
 import { filesystemTools } from './tools/filesystem';
 import { ToolRegistry } from './tools/registry';
@@ -29,21 +30,24 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
     const key = apiKey || process.env.OPENAI_API_KEY;
     if (!key) throw new Error('An OpenAI API key is required. Add one in Agent settings.');
     if (!request.model.trim()) throw new Error('Choose a model.');
-    let input: unknown = [...(request.history || []).slice(-12), { role: 'user', content: request.selectedFile
-      ? `Selected file: ${request.selectedFile}\n\n${request.prompt}` : request.prompt }];
+    const snippets = await retrieveWorkspaceContext(root, request.prompt, request.selectedFile, signal);
+    send({ type: 'context-files', sources: snippets.map(({ text: _text, ...source }) => source) });
+    let input: unknown = [...(request.history || []).slice(-12), { role: 'user', content: (request.selectedFile
+      ? `Selected file: ${request.selectedFile}\n\n${request.prompt}` : request.prompt) + formatRetrievedContext(snippets) }];
     let previousResponseId: string | undefined;
     let previousUsage: ContextUsage | undefined;
     const toolPaths: string[] = [];
     const tools = registry.definitions();
+    const instructions = `${agentInstructions} ${retrievalInstructions}`;
 
     for (let turn = 0; turn < 30; turn++) {
       if (signal.aborted) throw new Error('Stopped');
       const estimated = previousUsage
         ? previousUsage.inputTokens + (previousUsage.outputTokens || 0) + estimateTextTokens(JSON.stringify(input)) + 16
-        : estimateRequestTokens(input, agentInstructions, tools);
+        : estimateRequestTokens(input, instructions, tools);
       send({ type: 'context-usage', usage: { inputTokens: estimated, source: 'estimate' } });
       const response = await requestOpenAITurn({
-        apiKey: key, model: request.model.trim(), instructions: agentInstructions,
+        apiKey: key, model: request.model.trim(), instructions,
         tools, input, previousResponseId, signal, compactThreshold: compactionThreshold(contextSettings),
         onText: text => send({ type: 'delta', text }),
         onReasoning: text => send({ type: 'reasoning', text })
