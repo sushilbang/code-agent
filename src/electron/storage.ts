@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { ChatRecord, ChatSummary } from '../shared/types';
+import type { ChatRecord, ChatSummary, ContextSettings } from '../shared/types';
+import { DEFAULT_CONTEXT_SETTINGS, isContextSettings } from '../shared/context';
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
   try { return JSON.parse(await fs.readFile(file, 'utf8')) as T; }
@@ -49,7 +50,10 @@ export class LocalStore {
       typeof chat.title !== 'string' || typeof chat.workspaceRoot !== 'string' ||
       typeof chat.updatedAt !== 'string' || !Array.isArray(chat.messages) || serialized.length > 5_000_000 ||
       chat.messages.some(message => !message || typeof message.id !== 'string' ||
-        !['user', 'assistant'].includes(message.role) || typeof message.text !== 'string')) {
+        !['user', 'assistant'].includes(message.role) || typeof message.text !== 'string') ||
+      (chat.contextUsage !== undefined && (!chat.contextUsage || !Number.isSafeInteger(chat.contextUsage.inputTokens) ||
+        chat.contextUsage.inputTokens < 0 || !['estimate', 'api'].includes(chat.contextUsage.source) ||
+        (chat.contextUsage.outputTokens !== undefined && (!Number.isSafeInteger(chat.contextUsage.outputTokens) || chat.contextUsage.outputTokens < 0))))) {
       throw new Error('Invalid chat record.');
     }
     await this.serialized(async () => {
@@ -108,6 +112,24 @@ export class LocalStore {
       if (value) settings.openAIKey = value;
       else delete settings.openAIKey;
       await writeJson(file, settings);
+    });
+  }
+
+  async getContextSettings(): Promise<ContextSettings> {
+    return this.serialized(async () => {
+      const settings = await readJson<{ contextSettings?: unknown }>(path.join(this.directory, 'settings.json'), {});
+      return isContextSettings(settings.contextSettings) ? settings.contextSettings : { ...DEFAULT_CONTEXT_SETTINGS };
+    });
+  }
+
+  async setContextSettings(value: ContextSettings): Promise<ContextSettings> {
+    if (!isContextSettings(value)) throw new Error('Invalid context settings.');
+    return this.serialized(async () => {
+      const file = path.join(this.directory, 'settings.json');
+      const settings = await readJson<Record<string, unknown>>(file, {});
+      settings.contextSettings = value;
+      await writeJson(file, settings);
+      return value;
     });
   }
 }

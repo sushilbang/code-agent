@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, ChevronDown, ChevronRight, Code2, Copy, Eye, EyeOff, FileCode2, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, KeyRound, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Plus, RefreshCw, Save, Settings2, Square, Trash2, X } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-import type { AgentApprovalRequest, AgentEvent, ApprovalDecision, ChatMessage, ChatSummary, FileNode, WorkspaceSnapshot } from '../shared/types';
+import type { AgentApprovalRequest, AgentEvent, ApprovalDecision, ChatMessage, ChatSummary, ContextSettings, ContextUsage, FileNode, WorkspaceSnapshot } from '../shared/types';
+import { DEFAULT_CONTEXT_SETTINGS, contextLevel, isContextSettings } from '../shared/context';
 import { DEFAULT_OPENAI_MODEL, isOpenAIModel, OPENAI_MODELS } from '../shared/models';
 import Editor, { type EditorTab } from './Editor';
 
@@ -28,6 +29,7 @@ function TreeNode({ node, depth, expanded, toggle, selected, selectFile, selectD
 }
 
 function formatSize(size: number): string { return size < 1024 ? `${size} B` : `${(size / 1024).toFixed(1)} KB`; }
+function formatTokens(tokens: number): string { return tokens < 1000 ? String(tokens) : `${(tokens / 1000).toFixed(tokens < 10_000 ? 1 : 0)}k`; }
 function parentOf(file: string): string { const index = file.lastIndexOf('/'); return index < 0 ? '' : file.slice(0, index); }
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 
@@ -70,6 +72,11 @@ export default function App() {
   const [keyInput, setKeyInput] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [keySaving, setKeySaving] = useState(false);
+  const [contextSettings, setContextSettings] = useState<ContextSettings>(DEFAULT_CONTEXT_SETTINGS);
+  const [contextDraft, setContextDraft] = useState<ContextSettings>(DEFAULT_CONTEXT_SETTINGS);
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
+  const [contextDialog, setContextDialog] = useState(false);
+  const [contextSaving, setContextSaving] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState('Ready');
   const [approval, setApproval] = useState<AgentApprovalRequest | null>(null);
@@ -81,6 +88,7 @@ export default function App() {
   const activeTab = tabs.find(tab => tab.path === activePath) || null;
   const dirtyCount = tabs.filter(tab => tab.content !== tab.savedContent).length;
   const chatMatchesWorkspace = !chatRoot || chatRoot === workspace?.root;
+  const usageLevel = contextUsage ? contextLevel(contextUsage, contextSettings) : 'normal';
   tabsRef.current = tabs;
 
   useEffect(() => {
@@ -92,6 +100,7 @@ export default function App() {
       setProvider(environment.hasOpenAIKey ? 'openai' : 'local');
     });
     void window.codeAgent.listChats().then(setRecentChats).catch(error => setStatus(messageOf(error)));
+    void window.codeAgent.getContextSettings().then(settings => { setContextSettings(settings); setContextDraft(settings); }).catch(error => setStatus(messageOf(error)));
     const unsubscribeEvent = window.codeAgent.onAgentEvent(handleAgentEvent);
     const unsubscribeApproval = window.codeAgent.onApprovalRequest(request => {
       if (runRef.current !== request.runId || tabsRef.current.some(tab => tab.path === request.path || (request.tool === 'delete_directory' && tab.path.startsWith(`${request.path}/`)) ? tab.content !== tab.savedContent : false)) {
@@ -124,11 +133,11 @@ export default function App() {
     if (skipPersist.current) { skipPersist.current = false; return; }
     const timer = setTimeout(() => {
       const title = messages.find(message => message.role === 'user')?.text.slice(0, 80) || 'New chat';
-      void window.codeAgent.saveChat({ id: chatId, title, workspaceRoot: chatRoot, updatedAt: new Date().toISOString(), messages })
+      void window.codeAgent.saveChat({ id: chatId, title, workspaceRoot: chatRoot, updatedAt: new Date().toISOString(), messages, contextUsage: contextUsage || undefined })
         .then(() => window.codeAgent.listChats()).then(setRecentChats).catch(error => setStatus(messageOf(error)));
     }, 600);
     return () => clearTimeout(timer);
-  }, [chatId, chatRoot, messages]);
+  }, [chatId, chatRoot, messages, contextUsage]);
 
   function handleAgentEvent(event: AgentEvent) {
     if (runRef.current !== event.runId) return;
@@ -147,6 +156,8 @@ export default function App() {
     } else if (event.type === 'tool-output') {
       setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, tools: message.tools?.map(tool => tool.id === event.id ? { ...tool, content: `${tool.content || ''}${event.content}`.slice(-20000) } : tool) } : message));
       setStatus('Command running');
+    } else if (event.type === 'context-usage') {
+      setContextUsage(event.usage);
     } else if (event.type === 'file-changed') {
       const root = workspaceRef.current;
       void window.codeAgent.refreshWorkspace().then(snapshot => { if (root === workspaceRef.current) setWorkspace(snapshot); }).catch(error => setStatus(messageOf(error)));
@@ -179,7 +190,7 @@ export default function App() {
       if (!next) { setStatus('Ready'); return; }
       workspaceRef.current = next.root;
       setWorkspace(next); setSelectedNode(null); setTabs([]); setActivePath(null); setExpanded(new Set());
-      if (chatRoot !== next.root) { void persistCurrentChat(); setMessages([]); setChatId(crypto.randomUUID()); setChatRoot(next.root); }
+      if (chatRoot !== next.root) { void persistCurrentChat(); setMessages([]); setContextUsage(null); setChatId(crypto.randomUUID()); setChatRoot(next.root); }
       setSidebarView('chat');
       void window.codeAgent.listAllowedActions().then(setAllowedActions);
       setStatus(next.truncated ? 'Explorer limited to 5,000 entries' : 'Repository ready');
@@ -327,14 +338,14 @@ export default function App() {
   async function persistCurrentChat() {
     if (!chatRoot || !messages.length) return;
     const title = messages.find(message => message.role === 'user')?.text.slice(0, 80) || 'New chat';
-    try { await window.codeAgent.saveChat({ id: chatId, title, workspaceRoot: chatRoot, updatedAt: new Date().toISOString(), messages }); }
+    try { await window.codeAgent.saveChat({ id: chatId, title, workspaceRoot: chatRoot, updatedAt: new Date().toISOString(), messages, contextUsage: contextUsage || undefined }); }
     catch (error) { setStatus(messageOf(error)); }
   }
 
   function newChat(saveCurrent = true) {
     if (runRef.current) return;
     if (saveCurrent) void persistCurrentChat();
-    setChatId(crypto.randomUUID()); setChatRoot(workspace?.root || null); setMessages([]); setSidebarView('chat');
+    setChatId(crypto.randomUUID()); setChatRoot(workspace?.root || null); setMessages([]); setContextUsage(null); setSidebarView('chat');
   }
 
   async function openChat(id: string) {
@@ -344,7 +355,7 @@ export default function App() {
       if (!chat) { setStatus('Chat not found'); return; }
       if (id !== chatId) await persistCurrentChat();
       skipPersist.current = true;
-      setChatId(chat.id); setChatRoot(chat.workspaceRoot); setMessages(chat.messages); setSidebarView('chat');
+      setChatId(chat.id); setChatRoot(chat.workspaceRoot); setMessages(chat.messages); setContextUsage(chat.contextUsage || null); setSidebarView('chat');
       setStatus(chat.workspaceRoot === workspace?.root ? 'Chat opened' : 'Chat opened; select its folder to continue');
     } catch (error) { setStatus(messageOf(error)); }
   }
@@ -377,6 +388,16 @@ export default function App() {
       setStatus(result.hasOpenAIKey ? 'Saved key removed; using environment key' : 'API key removed');
     } catch (error) { setStatus(messageOf(error)); }
     finally { setKeySaving(false); }
+  }
+
+  async function saveContextSettings() {
+    if (!isContextSettings(contextDraft)) { setStatus('Choose a valid context budget and thresholds'); return; }
+    setContextSaving(true);
+    try {
+      const saved = await window.codeAgent.saveContextSettings(contextDraft);
+      setContextSettings(saved); setContextDialog(false); setStatus('Context preferences saved');
+    } catch (error) { setStatus(messageOf(error)); }
+    finally { setContextSaving(false); }
   }
 
   return <div className="app-shell editor-app">
@@ -441,7 +462,13 @@ export default function App() {
           </section>}
           <div ref={messageEnd} />
         </div>}
-        <div className="composer-wrap"><div className="composer">
+        <div className="composer-wrap">
+          {provider === 'openai' && <button className={`context-indicator ${usageLevel}`} type="button" onClick={() => { setContextDraft(contextSettings); setContextDialog(true); }}
+            title={contextUsage ? `${contextUsage.source === 'api' ? 'API reported' : 'Estimated'} input tokens for the latest model request. Working budget is a preference, not the model limit.` : 'Context usage appears after an OpenAI request. Configure the working budget.'}>
+            <span>Context</span><strong>{contextUsage ? `${contextUsage.source === 'estimate' ? '~' : ''}${formatTokens(contextUsage.inputTokens)} / ${formatTokens(contextSettings.workingBudgetTokens)}` : `— / ${formatTokens(contextSettings.workingBudgetTokens)}`}</strong>
+            {usageLevel !== 'normal' && <span>{usageLevel === 'warning' ? 'Near budget' : 'Review context'}</span>}
+          </button>}
+          <div className="composer">
           <textarea aria-label="Message to agent" placeholder={chatMatchesWorkspace ? 'Ask about this repository' : 'Open the linked folder to continue'} value={prompt} onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} disabled={!workspace || !chatMatchesWorkspace || Boolean(runId)} />
           <div className="composer-foot"><span className="composer-context" title={activePath || undefined}>{activePath ? activePath.split('/').at(-1) : workspace?.name || ''}</span>{provider === 'openai' && <select className="composer-model" aria-label="OpenAI model" title="Model" value={model} disabled={Boolean(runId)} onChange={event => setModel(event.target.value)}>{OPENAI_MODELS.map(name => <option value={name} key={name}>{name}</option>)}</select>}<button className="send-button" title={runId ? 'Stop response' : 'Send message'} aria-label={runId ? 'Stop response' : 'Send message'} disabled={!runId && (!workspace || !chatMatchesWorkspace || !prompt.trim())} onClick={() => void send()}>{runId ? <Square size={12} fill="currentColor" /> : <ArrowUp size={16} strokeWidth={2.4} />}</button></div>
         </div></div>
@@ -458,6 +485,16 @@ export default function App() {
       <label htmlFor="api-key">API key</label><div className="secret-input"><input id="api-key" autoFocus type={showKey ? 'text' : 'password'} value={keyInput} onChange={event => setKeyInput(event.target.value)} placeholder="sk-..." autoComplete="off" spellCheck={false} /><button type="button" className="icon-button" title={showKey ? 'Hide key' : 'Show key'} onClick={() => setShowKey(previous => !previous)}>{showKey ? <EyeOff size={16} /> : <Eye size={16} />}</button></div>
       <small>The key is encrypted with your operating system credentials. It is never added to chat history or sent to the editor.</small>
       <div className="dialog-actions">{keySource === 'saved' && <button type="button" className="danger" disabled={keySaving} onClick={() => void removeApiKey()}>Remove saved key</button>}<span /><button type="button" disabled={keySaving} onClick={() => setKeyDialog(false)}>Cancel</button><button type="submit" className="primary" disabled={keySaving || !keyInput.trim()}>{keySaving ? 'Saving...' : 'Save key'}</button></div>
+    </form></div>}
+    {contextDialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !contextSaving) setContextDialog(false); }}><form className="create-dialog context-dialog" onSubmit={event => { event.preventDefault(); void saveContextSettings(); }}>
+      <h2>Context usage</h2>
+      <p>The indicator shows input tokens for the latest model request. API counts replace local estimates when available. The working budget is your planning limit, not the model's maximum context window.</p>
+      {contextUsage && <p>Latest request: {contextUsage.source === 'estimate' ? 'approximately ' : ''}{contextUsage.inputTokens.toLocaleString()} input tokens{contextUsage.outputTokens === undefined ? '' : `, ${contextUsage.outputTokens.toLocaleString()} output tokens`}.</p>}
+      <label htmlFor="context-budget">Working budget (tokens)</label><input id="context-budget" type="number" min={16000} max={500000} step={1000} value={contextDraft.workingBudgetTokens} onChange={event => setContextDraft(previous => ({ ...previous, workingBudgetTokens: Number(event.target.value) }))} />
+      <label htmlFor="context-warning">Warn at (%)</label><input id="context-warning" type="number" min={50} max={90} value={contextDraft.warningPercent} onChange={event => setContextDraft(previous => ({ ...previous, warningPercent: Number(event.target.value) }))} />
+      <label htmlFor="context-compaction">Compaction target (%)</label><input id="context-compaction" type="number" min={55} max={99} value={contextDraft.compactionPercent} onChange={event => setContextDraft(previous => ({ ...previous, compactionPercent: Number(event.target.value) }))} />
+      <small>Automatic compaction is planned for the next milestone; reaching this target currently shows a review warning.</small>
+      <div className="dialog-actions"><span /><button type="button" disabled={contextSaving} onClick={() => setContextDialog(false)}>Cancel</button><button type="submit" className="primary" disabled={contextSaving || !isContextSettings(contextDraft)}>{contextSaving ? 'Saving...' : 'Save preferences'}</button></div>
     </form></div>}
     {contextMenu && <div className="file-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={event => event.stopPropagation()}>
       {!contextMenu.node.directory && <button role="menuitem" onClick={() => { void openFile(contextMenu.node); setContextMenu(null); }}><FileCode2 size={14} />Open</button>}

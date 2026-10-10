@@ -68,6 +68,12 @@ button:disabled{cursor:default;opacity:.48}
 .thinking{color:#87969e;animation:pulse 1.4s infinite}
 @keyframes pulse{50%{opacity:.45}}
 .composer-wrap{flex:none;padding:11px 12px 13px;border-top:1px solid #202020;background:#000}
+.context-indicator{width:100%;display:flex;align-items:center;gap:7px;margin:0 0 8px;padding:2px 4px;border:0;background:transparent;color:#899fa0;text-align:left;font-size:10px}
+.context-indicator strong{font-weight:600;color:#bfd1cf}
+.context-indicator span:last-child{margin-left:auto}
+.context-indicator:hover,.context-indicator:focus-visible{color:#d5e6e2;outline:none}
+.context-indicator.warning,.context-indicator.warning strong{color:#dfbe78}
+.context-indicator.compaction-target,.context-indicator.compaction-target strong{color:#e7a19a}
 .composer{height:126px;display:flex;flex-direction:column;border:1px solid #343434;border-radius:8px;background:#0c0c0c;overflow:hidden}
 .composer:focus-within{border-color:#78afa5}
 .composer textarea{resize:none;min-height:0;flex:1;width:100%;border:0;outline:0;background:transparent;color:#ecf1f2;padding:12px 13px 4px;font-size:13px;line-height:1.45}
@@ -121,6 +127,10 @@ button:disabled{cursor:default;opacity:.48}
 .secret-input .icon-button{flex:none;width:34px;height:34px;border:1px solid #60767a;background:#162027}
 .key-dialog .dialog-actions{align-items:center}
 .key-dialog .dialog-actions span{flex:1}
+.context-dialog p{white-space:normal;overflow:visible;line-height:1.5;margin-bottom:12px}
+.context-dialog label{display:block;margin:10px 0 5px;color:#b9c7c9;font-size:11px;font-weight:650}
+.context-dialog small{display:block;margin-top:12px;color:#8fa0a4;font-size:11px;line-height:1.45}
+.context-dialog .dialog-actions span{flex:1}
 .dialog-actions .danger{border-color:#714747;color:#efb5b5}
 .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:17px}
 .dialog-actions button{padding:7px 12px;border:1px solid #4a5b60;border-radius:5px;background:#2f3b40;color:#e4eded;font-size:12px}

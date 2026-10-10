@@ -24,7 +24,7 @@ export interface OpenAITurnOptions {
   onReasoning(text: string): void;
 }
 
-export interface OpenAITurnResult { id: string; call?: ToolCall; hadText: boolean }
+export interface OpenAITurnResult { id: string; call?: ToolCall; hadText: boolean; usage?: { inputTokens: number; outputTokens: number } }
 
 export async function requestOpenAITurn(options: OpenAITurnOptions): Promise<OpenAITurnResult> {
   const body: Record<string, unknown> = {
@@ -53,13 +53,21 @@ export async function readResponseStream(body: ReadableStream<Uint8Array>, signa
   let buffer = '', id = '';
   let call: ToolCall | undefined;
   let hadText = false, hadReasoning = false, completed = false;
+  let usage: OpenAITurnResult['usage'];
   const handleLine = (line: string) => {
     if (!line.startsWith('data:')) return;
     const data = line.slice(5).trim();
     if (!data || data === '[DONE]') return;
     const event = JSON.parse(data) as Record<string, any>;
     if (event.type === 'response.created' || event.type === 'response.completed') id = event.response?.id || id;
-    if (event.type === 'response.completed') completed = true;
+    if (event.type === 'response.completed') {
+      completed = true;
+      const reported = event.response?.usage;
+      if (Number.isSafeInteger(reported?.input_tokens) && reported.input_tokens >= 0 &&
+        Number.isSafeInteger(reported?.output_tokens) && reported.output_tokens >= 0) {
+        usage = { inputTokens: reported.input_tokens, outputTokens: reported.output_tokens };
+      }
+    }
     if (event.type === 'response.output_text.delta' || event.type === 'response.refusal.delta') {
       if (typeof event.delta === 'string') { hadText = true; onText(event.delta); }
     }
@@ -89,5 +97,5 @@ export async function readResponseStream(body: ReadableStream<Uint8Array>, signa
   } finally { reader.releaseLock(); }
   if (!completed) throw new Error('The OpenAI stream ended before completion.');
   if (!id) throw new Error('OpenAI did not return a response id.');
-  return { id, call, hadText };
+  return { id, call, hadText, usage };
 }

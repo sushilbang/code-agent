@@ -1,4 +1,5 @@
-import type { AgentRequest } from '../../shared/types';
+import type { AgentRequest, ContextUsage } from '../../shared/types';
+import { estimateRequestTokens, estimateTextTokens } from '../../shared/context';
 import { listFiles } from '../workspace';
 import { errorMessage, scopedEmitter, type EmitAgentEvent } from './events';
 import { agentInstructions } from './instructions';
@@ -30,15 +31,25 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
     let input: unknown = [...(request.history || []).slice(-12), { role: 'user', content: request.selectedFile
       ? `Selected file: ${request.selectedFile}\n\n${request.prompt}` : request.prompt }];
     let previousResponseId: string | undefined;
+    let previousUsage: ContextUsage | undefined;
+    const tools = registry.definitions();
 
     for (let turn = 0; turn < 30; turn++) {
       if (signal.aborted) throw new Error('Stopped');
+      const estimated = previousUsage
+        ? previousUsage.inputTokens + (previousUsage.outputTokens || 0) + estimateTextTokens(JSON.stringify(input)) + 16
+        : estimateRequestTokens(input, agentInstructions, tools);
+      send({ type: 'context-usage', usage: { inputTokens: estimated, source: 'estimate' } });
       const response = await requestOpenAITurn({
         apiKey: key, model: request.model.trim(), instructions: agentInstructions,
-        tools: registry.definitions(), input, previousResponseId, signal,
+        tools, input, previousResponseId, signal,
         onText: text => send({ type: 'delta', text }),
         onReasoning: text => send({ type: 'reasoning', text })
       });
+      if (response.usage) {
+        previousUsage = { inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens, source: 'api' };
+        send({ type: 'context-usage', usage: previousUsage });
+      } else previousUsage = { inputTokens: estimated, source: 'estimate' };
       previousResponseId = response.id;
       if (!response.call) {
         if (!response.hadText) throw new Error('OpenAI completed without text or a tool call.');

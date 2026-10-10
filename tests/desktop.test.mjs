@@ -16,6 +16,7 @@ import { gitInspectionTools } from '../dist-electron/electron/agent/tools/git.js
 import { diagnosticTools } from '../dist-electron/electron/agent/tools/diagnostics.js';
 import { runBoundedProcess } from '../dist-electron/electron/agent/tools/process.js';
 import { applyPatch } from 'diff';
+import { DEFAULT_CONTEXT_SETTINGS, contextLevel, estimateRequestTokens, estimateTextTokens, isContextSettings } from '../dist-electron/shared/context.js';
 
 async function fixture(run) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'code-agent-test-'));
@@ -33,6 +34,18 @@ test('workspace tree excludes generated folders', async () => fixture(async root
   assert.equal(tree.nodes[0].children[0].path, 'src/hello.ts');
   assert.equal(tree.nodes.some(node => node.name === 'node_modules'), false);
 }));
+
+test('context estimates grow with request content and thresholds are validated', () => {
+  const short = estimateRequestTokens([{ role: 'user', content: 'hello' }], 'Instructions', []);
+  const long = estimateRequestTokens([{ role: 'user', content: 'hello'.repeat(100) }], 'Instructions', []);
+  assert.ok(long > short);
+  assert.equal(estimateTextTokens('12345678'), 2);
+  assert.equal(isContextSettings(DEFAULT_CONTEXT_SETTINGS), true);
+  assert.equal(isContextSettings({ ...DEFAULT_CONTEXT_SETTINGS, compactionPercent: 70 }), false);
+  assert.equal(contextLevel({ inputTokens: 83_999, source: 'estimate' }, DEFAULT_CONTEXT_SETTINGS), 'normal');
+  assert.equal(contextLevel({ inputTokens: 84_000, source: 'api' }, DEFAULT_CONTEXT_SETTINGS), 'warning');
+  assert.equal(contextLevel({ inputTokens: 108_000, source: 'api' }, DEFAULT_CONTEXT_SETTINGS), 'compaction-target');
+});
 
 test('preview reads text and refuses binary and traversal', async () => fixture(async root => {
   await writeFile(path.join(root, 'hello.ts'), 'one\ntwo');
@@ -266,12 +279,12 @@ test('OpenAI stream exposes only returned reasoning summary and tool activity', 
       { type: 'response.created', response: { id: 'resp_1' } },
       { type: 'response.reasoning_summary_text.delta', delta: 'I should inspect the file.' },
       { type: 'response.output_item.done', item: { type: 'function_call', call_id: 'call_1', name: 'read_file', arguments: '{"path":"server.js"}' } },
-      { type: 'response.completed', response: { id: 'resp_1' } }
+      { type: 'response.completed', response: { id: 'resp_1', usage: { input_tokens: 321, output_tokens: 22 } } }
     ],
     [
       { type: 'response.created', response: { id: 'resp_2' } },
       { type: 'response.output_text.delta', delta: 'The file defines a server flag.' },
-      { type: 'response.completed', response: { id: 'resp_2' } }
+      { type: 'response.completed', response: { id: 'resp_2', usage: { input_tokens: 415, output_tokens: 18 } } }
     ]
   ];
   const requests = [];
@@ -282,10 +295,14 @@ test('OpenAI stream exposes only returned reasoning summary and tool activity', 
   try {
     const events = [];
     await runAgent(root, { runId: 'stream', prompt: 'Inspect server.js', provider: 'openai', model: 'test-model' }, new AbortController().signal, event => events.push(event));
-    assert.deepEqual(events.map(event => event.type), ['reasoning', 'tool-start', 'tool-result', 'delta', 'done']);
-    assert.equal(events[0].text, 'I should inspect the file.');
-    assert.equal(events[1].description, 'Reading server.js');
-    assert.match(events[2].content, /server = true/);
+    assert.deepEqual(events.map(event => event.type), ['context-usage', 'reasoning', 'context-usage', 'tool-start', 'tool-result', 'context-usage', 'delta', 'context-usage', 'done']);
+    assert.equal(events[0].usage.source, 'estimate');
+    assert.deepEqual(events[2].usage, { inputTokens: 321, outputTokens: 22, source: 'api' });
+    assert.equal(events[1].text, 'I should inspect the file.');
+    assert.equal(events[3].description, 'Reading server.js');
+    assert.match(events[4].content, /server = true/);
+    assert.ok(events[5].usage.inputTokens > 321);
+    assert.deepEqual(events[7].usage, { inputTokens: 415, outputTokens: 18, source: 'api' });
     assert.deepEqual(requests[0].reasoning, { summary: 'auto' });
     assert.equal(requests[1].previous_response_id, 'resp_1');
   } finally {
@@ -400,19 +417,32 @@ test('agent folder and file actions create, validate, and delete safely', async 
 test('local chats and per-workspace permissions persist and can be removed', async () => fixture(async root => {
   const store = new LocalStore(path.join(root, 'app-data'));
   const chat = { id: '12345678-1234-1234-1234-123456789abc', title: 'Edit example', workspaceRoot: root,
-    updatedAt: '2026-10-02T10:00:00.000Z', messages: [
+    updatedAt: '2026-10-02T10:00:00.000Z', contextUsage: { inputTokens: 415, outputTokens: 18, source: 'api' }, messages: [
       { id: 'one', role: 'user', text: 'Edit example' },
       { id: 'two', role: 'assistant', text: 'Updated.', tools: [{ id: 'write', name: 'write_file', path: 'example.ts', description: 'Writing example.ts', success: true, diff: '@@ -1 +1 @@\n-old\n+new' }] }
     ] };
   await store.saveChat(chat);
   assert.equal((await store.listChats())[0].title, chat.title);
   assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).messages, chat.messages);
+  assert.deepEqual((await new LocalStore(path.join(root, 'app-data')).getChat(chat.id)).contextUsage, chat.contextUsage);
   await store.allowAction(root, 'write_file');
   assert.deepEqual(await store.allowedActions(root), ['write_file']);
   assert.deepEqual(await store.allowedActions(path.join(root, 'other')), []);
   assert.deepEqual(await store.revokeAction(root, 'write_file'), []);
   await store.deleteChat(chat.id);
   assert.deepEqual(await store.listChats(), []);
+}));
+
+test('context settings persist without replacing the encrypted key', async () => fixture(async root => {
+  const store = new LocalStore(path.join(root, 'app-data'));
+  assert.deepEqual(await store.getContextSettings(), DEFAULT_CONTEXT_SETTINGS);
+  await store.setEncryptedOpenAIKey('encrypted-one');
+  const configured = { workingBudgetTokens: 80_000, warningPercent: 65, compactionPercent: 85 };
+  await store.setContextSettings(configured);
+  const restored = new LocalStore(path.join(root, 'app-data'));
+  assert.deepEqual(await restored.getContextSettings(), configured);
+  assert.equal(await restored.getEncryptedOpenAIKey(), 'encrypted-one');
+  await assert.rejects(store.setContextSettings({ ...configured, compactionPercent: 65 }), /Invalid context settings/);
 }));
 
 test('encrypted API key payload can be saved, replaced, and removed', async () => fixture(async root => {

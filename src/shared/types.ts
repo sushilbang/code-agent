@@ -47,8 +47,21 @@ export interface ChatRecord {
   workspaceRoot: string;
   updatedAt: string;
   messages: ChatMessage[];
+  contextUsage?: ContextUsage;
 }
 export interface ChatSummary { id: string; title: string; workspaceRoot: string; updatedAt: string }
+
+export interface ContextSettings {
+  workingBudgetTokens: number;
+  warningPercent: number;
+  compactionPercent: number;
+}
+
+export interface ContextUsage {
+  inputTokens: number;
+  outputTokens?: number;
+  source: 'estimate' | 'api';
+}
 
 export type AgentEvent =
   | { runId: string; type: 'delta'; text: string }
@@ -56,6 +69,7 @@ export type AgentEvent =
   | { runId: string; type: 'tool-start'; id: string; name: string; path: string; description: string }
   | { runId: string; type: 'tool-result'; id: string; success: boolean; content: string; diff?: string }
   | { runId: string; type: 'tool-output'; id: string; content: string }
+  | { runId: string; type: 'context-usage'; usage: ContextUsage }
   | { runId: string; type: 'file-changed'; path: string; deleted?: boolean; directory?: boolean }
   | { runId: string; type: 'done' }
   | { runId: string; type: 'error'; message: string };
@@ -93,4 +107,6 @@ export interface DesktopApi {
   getEnvironment(): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' | 'environment' | 'none'; defaultModel: string }>;
   saveOpenAIKey(key: string): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' }>;
   deleteOpenAIKey(): Promise<{ hasOpenAIKey: boolean; keySource: 'environment' | 'none' }>;
+  getContextSettings(): Promise<ContextSettings>;
+  saveContextSettings(settings: ContextSettings): Promise<ContextSettings>;
 }

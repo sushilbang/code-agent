@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage } from 'electron';
 import type { AgentApprovalRequest, AgentRequest, ApprovalDecision, ChatRecord } from '../shared/types';
+import { isContextSettings } from '../shared/context';
 import { DEFAULT_OPENAI_MODEL, isOpenAIModel } from '../shared/models';
 import { runAgent, type ApprovalTarget } from './agent';
 import { buildActionDiff } from './actionDiff';
@@ -265,6 +266,13 @@ ipcMain.handle('agent:delete-key', async event => {
   checkSender(event);
   await store.setEncryptedOpenAIKey(null);
   return { hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY), keySource: process.env.OPENAI_API_KEY ? 'environment' as const : 'none' as const };
+});
+
+ipcMain.handle('agent:context-settings', event => { checkSender(event); return store.getContextSettings(); });
+ipcMain.handle('agent:save-context-settings', (event, settings: unknown) => {
+  checkSender(event);
+  if (!isContextSettings(settings)) throw new Error('Invalid context settings.');
+  return store.setContextSettings(settings);
 });
 
 ipcMain.handle('agent:start', (event, request: AgentRequest) => {

@@ -34,6 +34,8 @@ The explorer and agent panes are resizable and collapsible from their headers. T
 
 Chats are saved locally in Electron's user-data directory as `chats.json` (on Windows, normally `%APPDATA%\code-agent\chats.json`). Allowed actions are stored beside it in `permissions.json`. Use the clock icon to open recent chats. Each chat remembers its folder, but opening a chat does not automatically open or switch folders; select the matching folder to continue the conversation. The root `example.ts` test fixture was removed; tests use temporary workspaces.
 
+The context indicator above the OpenAI composer shows input tokens for the latest model request. `~` marks a local estimate; the API-reported count replaces it when the response completes. Click it to set a working budget and warning/compaction-target percentages. These are planning preferences, not the model's hard context limit. At present the target only warns; automatic compaction is a future milestone. New runs send up to the last 12 non-error chat messages (each capped at 10,000 characters), the new prompt, and the selected file path—not the editor buffer automatically. Within a run, OpenAI retains prior turns through `previous_response_id`, including tool calls and bounded tool results. The full visible chat remains locally saved, but it is not all sent to the model. See [context-management.md](docs/context-management.md) for the design and research notes.
+
 ## Verify
 
 ```powershell

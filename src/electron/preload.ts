@@ -15,6 +15,8 @@ const api: DesktopApi = {
   getEnvironment: () => ipcRenderer.invoke('agent:environment'),
   saveOpenAIKey: key => ipcRenderer.invoke('agent:save-key', key),
   deleteOpenAIKey: () => ipcRenderer.invoke('agent:delete-key'),
+  getContextSettings: () => ipcRenderer.invoke('agent:context-settings'),
+  saveContextSettings: settings => ipcRenderer.invoke('agent:save-context-settings', settings),
   onAgentEvent: listener => {
     const handler = (_event: Electron.IpcRendererEvent, payload: AgentEvent) => listener(payload);
     ipcRenderer.on('agent:event', handler);
