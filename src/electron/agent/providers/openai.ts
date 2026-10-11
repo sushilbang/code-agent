@@ -23,6 +23,8 @@ export interface OpenAITurnOptions {
   input: unknown;
   previousResponseId?: string;
   compactThreshold: number;
+  maxOutputTokens?: number;
+  reasoningEffort?: 'low' | 'medium' | 'high';
   signal: AbortSignal;
   onText(text: string): void;
   onReasoning(text: string): void;
@@ -32,9 +34,10 @@ export async function requestOpenAITurn(options: OpenAITurnOptions): Promise<Ope
   const body: Record<string, unknown> = {
     model: options.model, instructions: options.instructions, tools: options.tools,
     parallel_tool_calls: false, stream: true, store: true,
-    reasoning: { summary: 'auto' }, input: options.input,
+    reasoning: { summary: 'auto', ...(options.reasoningEffort ? { effort: options.reasoningEffort } : {}) }, input: options.input,
     context_management: [{ type: 'compaction', compact_threshold: options.compactThreshold }]
   };
+  if (options.maxOutputTokens) body.max_output_tokens = options.maxOutputTokens;
   if (options.previousResponseId) body.previous_response_id = options.previousResponseId;
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',

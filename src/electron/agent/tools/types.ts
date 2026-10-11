@@ -11,6 +11,7 @@ export interface ToolContext {
   approveWrite: ApproveAgentChange;
   fileChanged(path: string, deleted?: boolean, directory?: boolean): void;
   toolOutput(content: string): void;
+  runInvestigations?(tasks: string[]): Promise<string>;
 }
 
 export interface AgentTool {

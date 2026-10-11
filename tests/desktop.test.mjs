@@ -372,6 +372,67 @@ test('OpenAI stream exposes only returned reasoning summary and tool activity', 
   }
 }));
 
+test('parent agent delegates bounded investigations to isolated read-only sub-agents', async () => fixture(async root => {
+  await writeFile(path.join(root, 'alpha.ts'), 'export const alpha = true;\n');
+  await writeFile(path.join(root, 'beta.ts'), 'export const beta = true;\n');
+  const oldFetch = globalThis.fetch;
+  const requests = [];
+  let parentTurns = 0, childActive = 0, maxChildActive = 0, childId = 0;
+  const response = events => new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n');
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    if (body.instructions.startsWith('You are a read-only repository investigator')) {
+      childActive++; maxChildActive = Math.max(maxChildActive, childActive);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      childActive--;
+      const id = `child_${++childId}`;
+      const task = body.input[0].content.startsWith('Inspect alpha') ? 'alpha.ts is enabled.' : 'beta.ts is enabled.';
+      return response([
+        { type: 'response.created', response: { id } },
+        { type: 'response.output_text.delta', delta: task },
+        { type: 'response.completed', response: { id, usage: { input_tokens: 40, output_tokens: 8 } } }
+      ]);
+    }
+    parentTurns++;
+    if (parentTurns === 1) return response([
+      { type: 'response.created', response: { id: 'parent_1' } },
+      { type: 'response.output_item.done', item: { type: 'function_call', call_id: 'delegate_1', name: 'delegate_investigations', arguments: '{"tasks":["Inspect alpha behavior","Inspect beta behavior"]}' } },
+      { type: 'response.completed', response: { id: 'parent_1', usage: { input_tokens: 100, output_tokens: 10 } } }
+    ]);
+    return response([
+      { type: 'response.created', response: { id: 'parent_2' } },
+      { type: 'response.output_text.delta', delta: 'Both investigations completed.' },
+      { type: 'response.completed', response: { id: 'parent_2', usage: { input_tokens: 150, output_tokens: 12 } } }
+    ]);
+  };
+  try {
+    const events = [];
+    await runAgent(root, { runId: 'delegate', prompt: 'Compare alpha and beta', provider: 'openai', model: 'test-model' },
+      new AbortController().signal, event => events.push(event), async () => false, 'test-key');
+    const parentRequests = requests.filter(request => !request.instructions.startsWith('You are a read-only repository investigator'));
+    const childRequests = requests.filter(request => request.instructions.startsWith('You are a read-only repository investigator'));
+    assert.equal(parentRequests.length, 2);
+    assert.equal(childRequests.length, 2);
+    assert.equal(maxChildActive, 2);
+    assert.ok(parentRequests[0].tools.some(tool => tool.name === 'delegate_investigations'));
+    for (const request of childRequests) {
+      const names = request.tools.map(tool => tool.name);
+      assert.deepEqual(names, ['list_files', 'read_file', 'glob_files', 'search_text', 'git_status', 'git_diff']);
+      assert.equal(names.some(name => ['write_file', 'run_command', 'run_diagnostics', 'delegate_investigations'].includes(name)), false);
+      assert.equal(request.max_output_tokens, 800);
+      assert.deepEqual(request.reasoning, { summary: 'auto', effort: 'low' });
+      assert.equal(request.input.length, 1);
+    }
+    const result = events.find(event => event.type === 'tool-result' && event.id === 'delegate_1');
+    assert.equal(result.success, true);
+    assert.match(result.content, /alpha\.ts is enabled/);
+    assert.match(result.content, /beta\.ts is enabled/);
+    assert.match(result.content, /"inputTokens": 40/);
+    assert.equal(events.at(-1).type, 'done');
+  } finally { globalThis.fetch = oldFetch; }
+}));
+
 test('compaction emits a visible checkpoint and preserves provider continuation', async () => fixture(async root => {
   await writeFile(path.join(root, 'task.txt'), 'A'.repeat(1000));
   const oldFetch = globalThis.fetch;

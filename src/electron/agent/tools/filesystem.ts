@@ -116,4 +116,5 @@ function deleteTool(directory: boolean): AgentTool {
   };
 }
 
-export const filesystemTools: AgentTool[] = [listFilesTool, readFileTool, writeFileTool, replaceInFileTool, createFileTool, createDirectoryTool, deleteTool(false), deleteTool(true)];
+export const readOnlyFilesystemTools: AgentTool[] = [listFilesTool, readFileTool];
+export const filesystemTools: AgentTool[] = [...readOnlyFilesystemTools, writeFileTool, replaceInFileTool, createFileTool, createDirectoryTool, deleteTool(false), deleteTool(true)];

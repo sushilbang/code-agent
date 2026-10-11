@@ -13,9 +13,11 @@ import { workspaceSearchTools } from './tools/search';
 import { shellTools } from './tools/shell';
 import { gitInspectionTools } from './tools/git';
 import { diagnosticTools } from './tools/diagnostics';
+import { subagentTools } from './tools/subagents';
+import { runReadOnlyInvestigations } from './subagents';
 import type { ApproveAgentChange } from './tools/types';
 
-const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools]);
+const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools, ...subagentTools]);
 
 export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: EmitAgentEvent, approveWrite: ApproveAgentChange = async () => false, apiKey?: string, contextSettings: ContextSettings = DEFAULT_CONTEXT_SETTINGS, memories: ProjectMemory[] = []): Promise<void> {
   const send = scopedEmitter(request.runId, emit);
@@ -76,7 +78,8 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
         result = await prepared.execute({
           root, signal, approveWrite,
           fileChanged: (path, deleted, directory) => send({ type: 'file-changed', path, deleted, directory }),
-          toolOutput: content => send({ type: 'tool-output', id: call.call_id, content })
+          toolOutput: content => send({ type: 'tool-output', id: call.call_id, content }),
+          runInvestigations: tasks => runReadOnlyInvestigations(root, tasks, key, request.model.trim(), signal)
         });
       } catch (error) {
         result = { success: false, content: errorMessage(error) };
