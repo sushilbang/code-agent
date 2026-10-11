@@ -6,5 +6,7 @@ dist-electron/
 .electron-data/
 .chrome-qa/
 artifacts/
+evals/
 roadmap.md
 AGENTS.md
+blog-tracker.md

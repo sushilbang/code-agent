@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ProjectMemory, ProjectMemoryInput } from '../shared/types';
+import { containsLikelySecret } from './agent/memorySafety';
 
 function validate(input: ProjectMemoryInput): ProjectMemoryInput {
   if (!input || typeof input !== 'object' || (input.id !== undefined && (typeof input.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(input.id))) ||
@@ -10,6 +11,9 @@ function validate(input: ProjectMemoryInput): ProjectMemoryInput {
     typeof input.enabled !== 'boolean' || !input.source || !['user', 'file'].includes(input.source.kind) ||
     (input.source.reference !== undefined && (typeof input.source.reference !== 'string' || input.source.reference.length > 300)) ||
     (input.source.kind === 'file' && !input.source.reference?.trim())) throw new Error('Invalid project memory.');
+  if (containsLikelySecret(`${input.topic}\n${input.value}\n${input.source.reference || ''}`)) {
+    throw new Error('Project memory appears to contain a credential. Remove it before saving.');
+  }
   return { id: input.id, topic: input.topic.trim(), value: input.value.trim(), enabled: input.enabled,
     source: { kind: input.source.kind, reference: input.source.reference?.trim() || undefined } };
 }

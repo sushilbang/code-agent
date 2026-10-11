@@ -45,6 +45,35 @@ test('only relevant enabled memory is formatted with provenance and bounded sele
   assert.throws(() => store.save(root, { topic: 'Invalid', value: 'x', source: { kind: 'file' }, enabled: true }), /Invalid project memory/);
 }));
 
+test('memory rejects obvious credentials and excludes legacy credentials from model context', async () => fixture(async root => {
+  const store = new ProjectMemoryStore(root);
+  const input = { topic: 'OpenAI API key', value: 'sk-test-placeholder', source: { kind: 'user' }, enabled: true };
+  assert.throws(() => store.save(root, input), /appears to contain a credential/);
+  assert.throws(() => store.save(root, { ...input, value: 'password: long-placeholder-value' }), /appears to contain a credential/);
+  const [ordinary] = await store.save(root, { ...input, value: 'Use the encrypted main-process key store.' });
+  const legacy = { ...ordinary, id: 'legacy', value: 'sk-test-placeholder' };
+  const selected = selectProjectMemories([legacy, ordinary], 'Where is the OpenAI API key used?');
+  assert.deepEqual(selected.map(item => item.id), [ordinary.id]);
+  assert.doesNotMatch(formatProjectMemories(selected), /sk-test-placeholder/);
+  assert.doesNotMatch(formatProjectMemories([legacy]), /sk-test-placeholder/);
+}));
+
+test('stale file labels and conflicting enabled memories remain visible across sessions', async () => fixture(async root => {
+  const store = new ProjectMemoryStore(path.join(root, 'app-data'));
+  const current = { topic: 'Billing invoices', value: 'Use integer cents.', source: { kind: 'file', reference: 'docs/missing.md' }, enabled: true };
+  const old = { topic: 'Old billing invoices', value: 'Use floating point.', source: { kind: 'user' }, enabled: true };
+  const [first] = await store.save(root, current);
+  const listed = await store.save(root, old);
+  const restarted = new ProjectMemoryStore(path.join(root, 'app-data'));
+  const selected = selectProjectMemories(await restarted.list(root), 'Explain billing invoices');
+  assert.equal(selected.length, 2);
+  assert.match(formatProjectMemories(selected), /docs\/missing\.md/);
+  assert.match(formatProjectMemories(selected), /floating point/);
+  const obsolete = listed.find(item => item.topic === old.topic);
+  await restarted.save(root, { ...old, id: obsolete.id, enabled: false });
+  assert.deepEqual(selectProjectMemories(await store.list(root), 'Explain billing invoices').map(item => item.id), [first.id]);
+}));
+
 test('a new model run includes only explicitly saved relevant memory and exposes its use', async () => fixture(async root => {
   const project = path.join(root, 'project');
   await mkdir(project);
@@ -59,11 +88,13 @@ test('a new model run includes only explicitly saved relevant memory and exposes
   };
   try {
     const events = [];
+    const legacy = { ...memory, id: 'legacy', value: 'sk-test-placeholder' };
     await runAgent(project, { runId: 'memory', prompt: 'Explain billing invoices', provider: 'openai', model: 'test-model' },
-      new AbortController().signal, event => events.push(event), async () => false, 'test-key', DEFAULT_CONTEXT_SETTINGS, await store.list(project));
+      new AbortController().signal, event => events.push(event), async () => false, 'test-key', DEFAULT_CONTEXT_SETTINGS, [...await store.list(project), legacy]);
     assert.deepEqual(events.find(event => event.type === 'context-memory').items, [{ id: memory.id, topic: memory.topic }]);
     assert.match(request.input.at(-1).content, /Invoices use integer cents/);
     assert.doesNotMatch(request.input.at(-1).content, /Invoices use floats/);
+    assert.doesNotMatch(request.input.at(-1).content, /sk-test-placeholder/);
     assert.equal(events.at(-1).type, 'done');
   } finally { globalThis.fetch = previousFetch; }
 }));
