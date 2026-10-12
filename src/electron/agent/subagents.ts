@@ -5,6 +5,7 @@ import { ToolRegistry } from './tools/registry';
 import { readOnlyFilesystemTools } from './tools/filesystem';
 import { workspaceSearchTools } from './tools/search';
 import { gitInspectionTools } from './tools/git';
+import type { SubAgentActivity } from '../../shared/types';
 
 const maxTasks = 3;
 const maxTurns = 6;
@@ -60,15 +61,25 @@ async function investigate(root: string, task: string, apiKey: string, model: st
   throw new Error(`Sub-agent exceeded its ${maxTurns}-turn limit.`);
 }
 
-export async function runReadOnlyInvestigations(root: string, tasks: string[], apiKey: string, model: string, signal: AbortSignal): Promise<string> {
+export async function runReadOnlyInvestigations(root: string, tasks: string[], apiKey: string, model: string, signal: AbortSignal, onActivity: (activity: SubAgentActivity) => void = () => undefined): Promise<string> {
   if (tasks.length < 2 || tasks.length > maxTasks) throw new Error(`Run between 2 and ${maxTasks} investigations.`);
-  const results = await Promise.all(tasks.map(async task => {
-    try { return await investigate(root, task, apiKey, model, signal); }
+  const results = await Promise.all(tasks.map(async (task, index) => {
+    onActivity({ index, task, status: 'running', at: new Date().toISOString() });
+    try {
+      const result = await investigate(root, task, apiKey, model, signal);
+      onActivity({ index, task, status: 'completed', at: new Date().toISOString(), usage: result.usage });
+      return result;
+    }
     catch (error) {
-      if (signal.aborted) throw error;
+      if (signal.aborted) {
+        onActivity({ index, task, status: 'cancelled', at: new Date().toISOString() });
+        return { task, status: 'failed', error: 'Stopped', toolPaths: [], usage: { inputTokens: 0, outputTokens: 0 } } satisfies InvestigationResult;
+      }
+      onActivity({ index, task, status: 'failed', at: new Date().toISOString() });
       return { task, status: 'failed', error: error instanceof Error ? error.message : String(error), toolPaths: [], usage: { inputTokens: 0, outputTokens: 0 } } satisfies InvestigationResult;
     }
   }));
+  signal.throwIfAborted();
   const encoded = JSON.stringify({ results }, null, 2);
   if (encoded.length <= 14_000) return encoded;
   return JSON.stringify({ results: results.map(result => ({

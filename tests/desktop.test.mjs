@@ -429,6 +429,12 @@ test('parent agent delegates bounded investigations to isolated read-only sub-ag
     assert.match(result.content, /alpha\.ts is enabled/);
     assert.match(result.content, /beta\.ts is enabled/);
     assert.match(result.content, /"inputTokens": 40/);
+    const childEvents = events.filter(event => event.type === 'subagent-status' && event.id === 'delegate_1');
+    assert.deepEqual(childEvents.map(event => [event.activity.index, event.activity.status]),
+      [[0, 'running'], [1, 'running'], [0, 'completed'], [1, 'completed']]);
+    assert.ok(childEvents.every(event => !Number.isNaN(Date.parse(event.activity.at))));
+    assert.deepEqual(childEvents.filter(event => event.activity.usage).map(event => event.activity.usage),
+      [{ inputTokens: 40, outputTokens: 8 }, { inputTokens: 40, outputTokens: 8 }]);
     assert.equal(events.at(-1).type, 'done');
   } finally { globalThis.fetch = oldFetch; }
 }));

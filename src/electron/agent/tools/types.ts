@@ -1,5 +1,6 @@
 import type { AgentFileChange, AgentPathChange } from '../../workspace';
 import type { OpenAIToolDefinition } from '../providers/openai';
+import type { SubAgentActivity } from '../../../shared/types';
 
 export interface ToolResult { success: boolean; content: string; diff?: string }
 export type ApprovalTarget = AgentFileChange | AgentPathChange | { path: string; before: string | null; after: string; details: string };
@@ -11,7 +12,8 @@ export interface ToolContext {
   approveWrite: ApproveAgentChange;
   fileChanged(path: string, deleted?: boolean, directory?: boolean): void;
   toolOutput(content: string): void;
-  runInvestigations?(tasks: string[]): Promise<string>;
+  runInvestigations?(tasks: string[], onActivity: (activity: SubAgentActivity) => void): Promise<string>;
+  subagentActivity?(activity: SubAgentActivity): void;
 }
 
 export interface AgentTool {

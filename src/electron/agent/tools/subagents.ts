@@ -27,6 +27,6 @@ export const subagentTools: AgentTool[] = [{
       throw new Error('Provide two or three investigation tasks, each between 1 and 500 characters.');
     }
     if (!context.runInvestigations) throw new Error('Sub-agent investigations are unavailable in this context.');
-    return { success: true, content: await context.runInvestigations(tasks.map(task => task.trim())) };
+    return { success: true, content: await context.runInvestigations(tasks.map(task => task.trim()), activity => context.subagentActivity?.(activity)) };
   }
 }];

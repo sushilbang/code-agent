@@ -154,6 +154,11 @@ export default function App() {
     } else if (event.type === 'tool-output') {
       setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, tools: message.tools?.map(tool => tool.id === event.id ? { ...tool, content: `${tool.content || ''}${event.content}`.slice(-20000) } : tool) } : message));
       setStatus('Command running');
+    } else if (event.type === 'subagent-status') {
+      setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, tools: message.tools?.map(tool => tool.id === event.id ? {
+        ...tool, children: [...(tool.children || []).filter(child => child.index !== event.activity.index), event.activity].sort((a, b) => a.index - b.index)
+      } : tool) } : message));
+      setStatus(`Investigation ${event.activity.index + 1}: ${event.activity.status}`);
     } else if (event.type === 'context-usage') {
       setContextUsage(event.usage);
     } else if (event.type === 'context-compacted') {
@@ -447,9 +452,13 @@ export default function App() {
             </details>}
             {message.memoriesUsed && <details className="source-block"><summary>Project memory · {message.memoriesUsed.length} item(s)</summary>{message.memoriesUsed.length ? <ul>{message.memoriesUsed.map(item => <li key={item.id}>{item.topic}</li>)}</ul> : <p>No relevant project memory used.</p>}</details>}
             {message.reasoning && <details className="reasoning-block"><summary>Reasoning summary</summary><div>{message.reasoning}</div></details>}
-            {message.tools?.map(tool => <details className="tool-step" key={`${tool.id}-${Boolean(tool.diff)}`} open={Boolean(tool.diff)}>
+            {message.tools?.map(tool => <details className="tool-step" key={`${tool.id}-${Boolean(tool.diff)}`} open={Boolean(tool.diff) || Boolean(tool.children?.length)}>
               <summary><FileText size={13} /><span>{tool.name} · {tool.path}</span><small className={tool.success === false ? 'failed' : ''}>{tool.success === undefined ? 'Running' : tool.success ? 'Done' : 'Failed'}</small></summary>
               <div className="tool-description">{tool.description}</div>
+              {tool.children && <ol className="subagent-timeline" aria-label="Delegated investigations">{tool.children.map(child => <li key={child.index}>
+                <span className={`subagent-state ${child.status}`}>{child.status}</span><span className="subagent-task">{child.task}</span>
+                <small>{new Date(child.at).toLocaleTimeString()}{child.usage ? ` · ${child.usage.inputTokens + child.usage.outputTokens} tokens` : ''}</small>
+              </li>)}</ol>}
               {tool.diff && <DiffView diff={tool.diff} />}
               {tool.content !== undefined && <pre>{tool.content || '(no output)'}</pre>}
             </details>)}

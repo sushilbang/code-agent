@@ -16,5 +16,6 @@ Sub-agents cannot write or delete files, execute commands or diagnostics, reques
 - A final report is capped at 4,000 characters, and the combined tool result is capped at 14,000 characters.
 - API-reported input and output usage is accumulated per investigation and returned with the report.
 - One failed investigation is reported alongside successful siblings; cancellation still stops the entire delegation.
+- The parent emits per-child running, completed, failed, or cancelled events. The delegation tool entry shows a compact timeline with task, latest status, time, and reported token usage; it is saved with the chat.
 
-This first increment intentionally supports read-only fan-out rather than a general autonomous agent graph. Dependency-aware scheduling, run-wide cost budgets, visible per-child lifecycle events, persisted timelines, and any edit-capable delegation remain future work.
+This increment supports read-only fan-out. Dependency-aware scheduling, run-wide cost budgets, and any edit-capable delegation remain future work.

@@ -33,12 +33,19 @@ export interface AgentApprovalRequest {
 }
 
 export type ApprovalDecision = 'once' | 'always' | 'deny';
+export interface SubAgentActivity {
+  index: number;
+  task: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  at: string;
+  usage?: { inputTokens: number; outputTokens: number };
+}
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
   reasoning?: string;
-  tools?: { id: string; name: string; path: string; description: string; success?: boolean; content?: string; diff?: string }[];
+  tools?: { id: string; name: string; path: string; description: string; success?: boolean; content?: string; diff?: string; children?: SubAgentActivity[] }[];
   error?: boolean;
   retrieved?: RetrievedSource[];
   memoriesUsed?: { id: string; topic: string }[];
@@ -96,6 +103,7 @@ export type AgentEvent =
   | { runId: string; type: 'tool-start'; id: string; name: string; path: string; description: string }
   | { runId: string; type: 'tool-result'; id: string; success: boolean; content: string; diff?: string }
   | { runId: string; type: 'tool-output'; id: string; content: string }
+  | { runId: string; type: 'subagent-status'; id: string; activity: SubAgentActivity }
   | { runId: string; type: 'context-usage'; usage: ContextUsage }
   | { runId: string; type: 'context-compacted'; checkpoint: ContextCheckpoint }
   | { runId: string; type: 'context-files'; sources: RetrievedSource[] }

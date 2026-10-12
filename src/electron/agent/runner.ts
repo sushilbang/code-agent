@@ -79,7 +79,8 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
           root, signal, approveWrite,
           fileChanged: (path, deleted, directory) => send({ type: 'file-changed', path, deleted, directory }),
           toolOutput: content => send({ type: 'tool-output', id: call.call_id, content }),
-          runInvestigations: tasks => runReadOnlyInvestigations(root, tasks, key, request.model.trim(), signal)
+          runInvestigations: (tasks, onActivity) => runReadOnlyInvestigations(root, tasks, key, request.model.trim(), signal, onActivity),
+          subagentActivity: activity => send({ type: 'subagent-status', id: call.call_id, activity })
         });
       } catch (error) {
         result = { success: false, content: errorMessage(error) };

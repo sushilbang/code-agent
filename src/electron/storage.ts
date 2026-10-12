@@ -56,7 +56,14 @@ export class LocalStore {
             !Number.isSafeInteger(source.startLine) || source.startLine < 1 || !Number.isSafeInteger(source.endLine) || source.endLine < source.startLine ||
             !['selected', 'path', 'content'].includes(source.reason)))) ||
         (message.memoriesUsed !== undefined && (!Array.isArray(message.memoriesUsed) || message.memoriesUsed.length > 6 ||
-          message.memoriesUsed.some(item => !item || typeof item.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(item.id) || typeof item.topic !== 'string' || item.topic.length > 80)))) ||
+          message.memoriesUsed.some(item => !item || typeof item.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(item.id) || typeof item.topic !== 'string' || item.topic.length > 80))) ||
+        (message.tools !== undefined && (!Array.isArray(message.tools) || message.tools.some(tool => !tool ||
+          (tool.children !== undefined && (!Array.isArray(tool.children) || tool.children.length > 3 || tool.children.some(child =>
+            !child || !Number.isSafeInteger(child.index) || child.index < 0 || child.index > 2 ||
+            typeof child.task !== 'string' || child.task.length > 500 ||
+            !['running', 'completed', 'failed', 'cancelled'].includes(child.status) || typeof child.at !== 'string' ||
+            (child.usage !== undefined && (!Number.isSafeInteger(child.usage.inputTokens) || child.usage.inputTokens < 0 ||
+              !Number.isSafeInteger(child.usage.outputTokens) || child.usage.outputTokens < 0))))))))) ||
       (chat.contextUsage !== undefined && (!chat.contextUsage || !Number.isSafeInteger(chat.contextUsage.inputTokens) ||
         chat.contextUsage.inputTokens < 0 || !['estimate', 'api'].includes(chat.contextUsage.source) ||
         (chat.contextUsage.outputTokens !== undefined && (!Number.isSafeInteger(chat.contextUsage.outputTokens) || chat.contextUsage.outputTokens < 0)))) ||
