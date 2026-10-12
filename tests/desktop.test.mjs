@@ -16,7 +16,8 @@ import { gitInspectionTools } from '../dist-electron/electron/agent/tools/git.js
 import { diagnosticTools } from '../dist-electron/electron/agent/tools/diagnostics.js';
 import { runBoundedProcess } from '../dist-electron/electron/agent/tools/process.js';
 import { applyPatch } from 'diff';
-import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, contextLevel, estimateRequestTokens, estimateTextTokens, isContextSettings } from '../dist-electron/shared/context.js';
+import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, contextLevel, estimateRequestTokens, estimateTextTokens, isContextSettings, restoreContextSettings } from '../dist-electron/shared/context.js';
+import { runReadOnlyInvestigations, SubAgentTokenBudget } from '../dist-electron/electron/agent/subagents.js';
 import { createContextCheckpoint } from '../dist-electron/electron/agent/context.js';
 import { formatRetrievedContext, retrieveWorkspaceContext } from '../dist-electron/electron/agent/retrieval.js';
 
@@ -44,6 +45,9 @@ test('context estimates grow with request content and thresholds are validated',
   assert.equal(estimateTextTokens('12345678'), 2);
   assert.equal(isContextSettings(DEFAULT_CONTEXT_SETTINGS), true);
   assert.equal(isContextSettings({ ...DEFAULT_CONTEXT_SETTINGS, compactionPercent: 70 }), false);
+  assert.equal(isContextSettings({ ...DEFAULT_CONTEXT_SETTINGS, subAgentBudgetTokens: 3999 }), false);
+  assert.deepEqual(restoreContextSettings({ workingBudgetTokens: 80_000, warningPercent: 65, compactionPercent: 85 }),
+    { workingBudgetTokens: 80_000, warningPercent: 65, compactionPercent: 85, subAgentBudgetTokens: 20_000 });
   assert.equal(contextLevel({ inputTokens: 83_999, source: 'estimate' }, DEFAULT_CONTEXT_SETTINGS), 'normal');
   assert.equal(contextLevel({ inputTokens: 84_000, source: 'api' }, DEFAULT_CONTEXT_SETTINGS), 'warning');
   assert.equal(contextLevel({ inputTokens: 108_000, source: 'api' }, DEFAULT_CONTEXT_SETTINGS), 'compaction-target');
@@ -372,6 +376,42 @@ test('OpenAI stream exposes only returned reasoning summary and tool activity', 
   }
 }));
 
+test('sub-agent budget reserves concurrent requests and carries usage across delegations', () => {
+  const budget = new SubAgentTokenBudget(4_000);
+  const first = budget.reserve(1_500);
+  const second = budget.reserve(1_500);
+  assert.deepEqual(budget.snapshot(), { usedTokens: 3_000, limitTokens: 4_000, estimated: true });
+  assert.throws(() => budget.reserve(1_100), /budget exhausted/);
+  budget.settle(first, { inputTokens: 800, outputTokens: 100 });
+  budget.settle(second, { inputTokens: 1_000, outputTokens: 100 });
+  assert.deepEqual(budget.snapshot(), { usedTokens: 2_000, limitTokens: 4_000, estimated: false });
+  budget.reserve(1_900);
+  assert.throws(() => budget.reserve(200), /budget exhausted/);
+});
+
+test('later delegations do not start child requests after the run budget is spent', async () => fixture(async root => {
+  const oldFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(`data: ${JSON.stringify({ type: 'response.created', response: { id: `child_${calls}` } })}\n\n` +
+      `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: 'Investigated.' })}\n\n` +
+      `data: ${JSON.stringify({ type: 'response.completed', response: { id: `child_${calls}`, usage: { input_tokens: 1_900, output_tokens: 50 } } })}\n\n` +
+      'data: [DONE]\n\n');
+  };
+  try {
+    const budget = new SubAgentTokenBudget(4_000);
+    const first = JSON.parse(await runReadOnlyInvestigations(root, ['Inspect A', 'Inspect B'], 'key', 'test-model', new AbortController().signal,
+      () => undefined, budget));
+    assert.ok(first.results.every(result => result.status === 'completed'));
+    assert.equal(budget.snapshot().usedTokens, 3_900);
+    const second = JSON.parse(await runReadOnlyInvestigations(root, ['Inspect C', 'Inspect D'], 'key', 'test-model', new AbortController().signal,
+      () => undefined, budget));
+    assert.ok(second.results.every(result => result.status === 'failed' && /budget exhausted/.test(result.error)));
+    assert.equal(calls, 2);
+  } finally { globalThis.fetch = oldFetch; }
+}));
+
 test('parent agent delegates bounded investigations to isolated read-only sub-agents', async () => fixture(async root => {
   await writeFile(path.join(root, 'alpha.ts'), 'export const alpha = true;\n');
   await writeFile(path.join(root, 'beta.ts'), 'export const beta = true;\n');
@@ -430,11 +470,17 @@ test('parent agent delegates bounded investigations to isolated read-only sub-ag
     assert.match(result.content, /beta\.ts is enabled/);
     assert.match(result.content, /"inputTokens": 40/);
     const childEvents = events.filter(event => event.type === 'subagent-status' && event.id === 'delegate_1');
-    assert.deepEqual(childEvents.map(event => [event.activity.index, event.activity.status]),
-      [[0, 'running'], [1, 'running'], [0, 'completed'], [1, 'completed']]);
+    assert.deepEqual(childEvents.slice(0, 2).map(event => [event.activity.index, event.activity.status]),
+      [[0, 'running'], [1, 'running']]);
+    assert.deepEqual(childEvents.slice(2).map(event => [event.activity.index, event.activity.status]).sort(),
+      [[0, 'completed'], [1, 'completed']]);
     assert.ok(childEvents.every(event => !Number.isNaN(Date.parse(event.activity.at))));
     assert.deepEqual(childEvents.filter(event => event.activity.usage).map(event => event.activity.usage),
       [{ inputTokens: 40, outputTokens: 8 }, { inputTokens: 40, outputTokens: 8 }]);
+    const budgetEvents = events.filter(event => event.type === 'subagent-budget' && event.id === 'delegate_1');
+    assert.equal(budgetEvents.at(-1).usage.usedTokens, 96);
+    assert.equal(budgetEvents.at(-1).usage.limitTokens, 20_000);
+    assert.equal(budgetEvents.at(-1).usage.estimated, false);
     assert.equal(events.at(-1).type, 'done');
   } finally { globalThis.fetch = oldFetch; }
 }));
@@ -461,7 +507,7 @@ test('compaction emits a visible checkpoint and preserves provider continuation'
   };
   try {
     const events = [];
-    const settings = { workingBudgetTokens: 16_000, warningPercent: 60, compactionPercent: 80 };
+    const settings = { workingBudgetTokens: 16_000, warningPercent: 60, compactionPercent: 80, subAgentBudgetTokens: 20_000 };
     await runAgent(root, { runId: 'compact', prompt: 'Follow this constraint', provider: 'openai', model: 'test-model', selectedFile: 'task.txt' },
       new AbortController().signal, event => events.push(event), async () => false, 'test-key', settings);
     assert.equal(requests.length, 3);
@@ -609,7 +655,7 @@ test('context settings persist without replacing the encrypted key', async () =>
   const store = new LocalStore(path.join(root, 'app-data'));
   assert.deepEqual(await store.getContextSettings(), DEFAULT_CONTEXT_SETTINGS);
   await store.setEncryptedOpenAIKey('encrypted-one');
-  const configured = { workingBudgetTokens: 80_000, warningPercent: 65, compactionPercent: 85 };
+  const configured = { workingBudgetTokens: 80_000, warningPercent: 65, compactionPercent: 85, subAgentBudgetTokens: 12_000 };
   await store.setContextSettings(configured);
   const restored = new LocalStore(path.join(root, 'app-data'));
   assert.deepEqual(await restored.getContextSettings(), configured);

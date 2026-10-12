@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ChatRecord, ChatSummary, ContextSettings } from '../shared/types';
-import { DEFAULT_CONTEXT_SETTINGS, isContextSettings } from '../shared/context';
+import { isContextSettings, restoreContextSettings } from '../shared/context';
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
   try { return JSON.parse(await fs.readFile(file, 'utf8')) as T; }
@@ -58,6 +58,8 @@ export class LocalStore {
         (message.memoriesUsed !== undefined && (!Array.isArray(message.memoriesUsed) || message.memoriesUsed.length > 6 ||
           message.memoriesUsed.some(item => !item || typeof item.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(item.id) || typeof item.topic !== 'string' || item.topic.length > 80))) ||
         (message.tools !== undefined && (!Array.isArray(message.tools) || message.tools.some(tool => !tool ||
+          (tool.budget !== undefined && (!tool.budget || !Number.isSafeInteger(tool.budget.usedTokens) || tool.budget.usedTokens < 0 ||
+            !Number.isSafeInteger(tool.budget.limitTokens) || tool.budget.limitTokens < 1 || typeof tool.budget.estimated !== 'boolean')) ||
           (tool.children !== undefined && (!Array.isArray(tool.children) || tool.children.length > 3 || tool.children.some(child =>
             !child || !Number.isSafeInteger(child.index) || child.index < 0 || child.index > 2 ||
             typeof child.task !== 'string' || child.task.length > 500 ||
@@ -138,7 +140,7 @@ export class LocalStore {
   async getContextSettings(): Promise<ContextSettings> {
     return this.serialized(async () => {
       const settings = await readJson<{ contextSettings?: unknown }>(path.join(this.directory, 'settings.json'), {});
-      return isContextSettings(settings.contextSettings) ? settings.contextSettings : { ...DEFAULT_CONTEXT_SETTINGS };
+      return restoreContextSettings(settings.contextSettings);
     });
   }
 

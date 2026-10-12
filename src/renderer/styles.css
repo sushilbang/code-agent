@@ -115,6 +115,7 @@ button:disabled{cursor:default;opacity:.48}
 .tool-description{padding:0 10px 7px;color:#98aaae;line-height:1.45}
 .tool-step pre{margin:0;padding:9px 10px 11px;border-top:1px solid #34434a;color:#cbd8d9;font-family:Consolas,monospace;font-size:11px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow:auto}
 .subagent-timeline{list-style:none;margin:0;padding:3px 10px 8px;border-top:1px solid #34434a}
+.subagent-budget{padding:7px 10px;color:#9fb8b3;border-top:1px solid #34434a}
 .subagent-timeline li{display:flex;align-items:baseline;gap:7px;padding:5px 0;flex-wrap:wrap}
 .subagent-state{text-transform:capitalize;color:#b5bfc3;min-width:57px}
 .subagent-state.completed{color:#8fab9f}

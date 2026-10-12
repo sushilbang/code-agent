@@ -40,12 +40,13 @@ export interface SubAgentActivity {
   at: string;
   usage?: { inputTokens: number; outputTokens: number };
 }
+export interface SubAgentBudgetUsage { usedTokens: number; limitTokens: number; estimated: boolean }
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
   reasoning?: string;
-  tools?: { id: string; name: string; path: string; description: string; success?: boolean; content?: string; diff?: string; children?: SubAgentActivity[] }[];
+  tools?: { id: string; name: string; path: string; description: string; success?: boolean; content?: string; diff?: string; children?: SubAgentActivity[]; budget?: SubAgentBudgetUsage }[];
   error?: boolean;
   retrieved?: RetrievedSource[];
   memoriesUsed?: { id: string; topic: string }[];
@@ -82,6 +83,7 @@ export interface ContextSettings {
   workingBudgetTokens: number;
   warningPercent: number;
   compactionPercent: number;
+  subAgentBudgetTokens: number;
 }
 
 export interface ContextUsage {
@@ -104,6 +106,7 @@ export type AgentEvent =
   | { runId: string; type: 'tool-result'; id: string; success: boolean; content: string; diff?: string }
   | { runId: string; type: 'tool-output'; id: string; content: string }
   | { runId: string; type: 'subagent-status'; id: string; activity: SubAgentActivity }
+  | { runId: string; type: 'subagent-budget'; id: string; usage: SubAgentBudgetUsage }
   | { runId: string; type: 'context-usage'; usage: ContextUsage }
   | { runId: string; type: 'context-compacted'; checkpoint: ContextCheckpoint }
   | { runId: string; type: 'context-files'; sources: RetrievedSource[] }

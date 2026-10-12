@@ -159,6 +159,8 @@ export default function App() {
         ...tool, children: [...(tool.children || []).filter(child => child.index !== event.activity.index), event.activity].sort((a, b) => a.index - b.index)
       } : tool) } : message));
       setStatus(`Investigation ${event.activity.index + 1}: ${event.activity.status}`);
+    } else if (event.type === 'subagent-budget') {
+      setMessages(previous => previous.map(message => message.id === event.runId ? { ...message, tools: message.tools?.map(tool => tool.id === event.id ? { ...tool, budget: event.usage } : tool) } : message));
     } else if (event.type === 'context-usage') {
       setContextUsage(event.usage);
     } else if (event.type === 'context-compacted') {
@@ -455,6 +457,7 @@ export default function App() {
             {message.tools?.map(tool => <details className="tool-step" key={`${tool.id}-${Boolean(tool.diff)}`} open={Boolean(tool.diff) || Boolean(tool.children?.length)}>
               <summary><FileText size={13} /><span>{tool.name} · {tool.path}</span><small className={tool.success === false ? 'failed' : ''}>{tool.success === undefined ? 'Running' : tool.success ? 'Done' : 'Failed'}</small></summary>
               <div className="tool-description">{tool.description}</div>
+              {tool.budget && <div className="subagent-budget">Subagent run budget: {tool.budget.estimated ? '~' : ''}{tool.budget.usedTokens.toLocaleString()} / {tool.budget.limitTokens.toLocaleString()} tokens</div>}
               {tool.children && <ol className="subagent-timeline" aria-label="Delegated investigations">{tool.children.map(child => <li key={child.index}>
                 <span className={`subagent-state ${child.status}`}>{child.status}</span><span className="subagent-task">{child.task}</span>
                 <small>{new Date(child.at).toLocaleTimeString()}{child.usage ? ` · ${child.usage.inputTokens + child.usage.outputTokens} tokens` : ''}</small>

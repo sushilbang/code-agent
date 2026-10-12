@@ -52,6 +52,8 @@ export default function ContextControls({ settings, usage, checkpoints, onSettin
       <label htmlFor="context-warning">Warn at (%)</label><input id="context-warning" type="number" min={50} max={90} value={draft.warningPercent} onChange={event => setDraft(previous => ({ ...previous, warningPercent: Number(event.target.value) }))} />
       <label htmlFor="context-compaction">Compact at (%)</label><input id="context-compaction" type="number" min={55} max={99} value={draft.compactionPercent} onChange={event => setDraft(previous => ({ ...previous, compactionPercent: Number(event.target.value) }))} />
       <small>OpenAI automatically compacts an active run when its rendered context crosses this threshold. New runs still use recent visible chat history; the provider's opaque state is not saved locally.</small>
+      <label htmlFor="subagent-budget">Subagent budget per run (tokens)</label><input id="subagent-budget" type="number" min={4000} max={200000} step={1000} value={draft.subAgentBudgetTokens} onChange={event => setDraft(previous => ({ ...previous, subAgentBudgetTokens: Number(event.target.value) }))} />
+      <small>Shared by every delegated investigation in one parent run. Estimates reserve tokens before concurrent requests; API usage replaces them afterward, so a response can exceed the limit slightly.</small>
       {error && <p role="alert" className="message-error">{error}</p>}
       <div className="dialog-actions"><span /><button type="button" disabled={saving} onClick={() => setOpen(false)}>Cancel</button><button type="submit" className="primary" disabled={saving || !isContextSettings(draft)}>{saving ? 'Saving...' : 'Save preferences'}</button></div>
     </form></div>}

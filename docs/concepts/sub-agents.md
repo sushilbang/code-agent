@@ -17,5 +17,6 @@ Sub-agents cannot write or delete files, execute commands or diagnostics, reques
 - API-reported input and output usage is accumulated per investigation and returned with the report.
 - One failed investigation is reported alongside successful siblings; cancellation still stops the entire delegation.
 - The parent emits per-child running, completed, failed, or cancelled events. The delegation tool entry shows a compact timeline with task, latest status, time, and reported token usage; it is saved with the chat.
+- One token budget is shared by every sub-agent request in a parent run, including later delegations. The default is 20,000 tokens; the context preferences dialog accepts 4,000–200,000. Before each concurrent model request, the main process reserves estimated input plus the 800-token output cap. API-reported input and output usage replace the reservation when available. If the remainder cannot cover a reservation, that child reports a budget failure without starting a request. Missing usage keeps the estimate charged. A response can exceed its reservation, so this is a spending guard rather than an exact hard cap. The delegation entry displays the run's current use and limit.
 
-This increment supports read-only fan-out. Dependency-aware scheduling, run-wide cost budgets, and any edit-capable delegation remain future work.
+This increment supports read-only fan-out. Dependency-aware scheduling and any edit-capable delegation remain future work.

@@ -14,7 +14,7 @@ import { shellTools } from './tools/shell';
 import { gitInspectionTools } from './tools/git';
 import { diagnosticTools } from './tools/diagnostics';
 import { subagentTools } from './tools/subagents';
-import { runReadOnlyInvestigations } from './subagents';
+import { runReadOnlyInvestigations, SubAgentTokenBudget } from './subagents';
 import type { ApproveAgentChange } from './tools/types';
 
 const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools, ...subagentTools]);
@@ -43,6 +43,7 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
     let previousUsage: ContextUsage | undefined;
     const toolPaths: string[] = [];
     const tools = registry.definitions();
+    const subAgentBudget = new SubAgentTokenBudget(contextSettings.subAgentBudgetTokens);
     const instructions = `${agentInstructions} ${retrievalInstructions} ${memoryInstructions}`;
 
     for (let turn = 0; turn < 30; turn++) {
@@ -79,8 +80,9 @@ export async function runAgent(root: string, request: AgentRequest, signal: Abor
           root, signal, approveWrite,
           fileChanged: (path, deleted, directory) => send({ type: 'file-changed', path, deleted, directory }),
           toolOutput: content => send({ type: 'tool-output', id: call.call_id, content }),
-          runInvestigations: (tasks, onActivity) => runReadOnlyInvestigations(root, tasks, key, request.model.trim(), signal, onActivity),
-          subagentActivity: activity => send({ type: 'subagent-status', id: call.call_id, activity })
+          runInvestigations: (tasks, onActivity, onBudget) => runReadOnlyInvestigations(root, tasks, key, request.model.trim(), signal, onActivity, subAgentBudget, onBudget),
+          subagentActivity: activity => send({ type: 'subagent-status', id: call.call_id, activity }),
+          subagentBudget: usage => send({ type: 'subagent-budget', id: call.call_id, usage })
         });
       } catch (error) {
         result = { success: false, content: errorMessage(error) };
