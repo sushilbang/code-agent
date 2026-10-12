@@ -14,10 +14,11 @@ import { workspaceSearchTools } from '../dist-electron/electron/agent/tools/sear
 import { shellTools } from '../dist-electron/electron/agent/tools/shell.js';
 import { gitInspectionTools } from '../dist-electron/electron/agent/tools/git.js';
 import { diagnosticTools } from '../dist-electron/electron/agent/tools/diagnostics.js';
+import { subagentTools } from '../dist-electron/electron/agent/tools/subagents.js';
 import { runBoundedProcess } from '../dist-electron/electron/agent/tools/process.js';
 import { applyPatch } from 'diff';
 import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, contextLevel, estimateRequestTokens, estimateTextTokens, isContextSettings, restoreContextSettings } from '../dist-electron/shared/context.js';
-import { runReadOnlyInvestigations, SubAgentTokenBudget } from '../dist-electron/electron/agent/subagents.js';
+import { normalizeInvestigationTasks, runReadOnlyInvestigations, SubAgentTokenBudget } from '../dist-electron/electron/agent/subagents.js';
 import { createContextCheckpoint } from '../dist-electron/electron/agent/context.js';
 import { formatRetrievedContext, retrieveWorkspaceContext } from '../dist-electron/electron/agent/retrieval.js';
 
@@ -412,6 +413,82 @@ test('later delegations do not start child requests after the run budget is spen
   } finally { globalThis.fetch = oldFetch; }
 }));
 
+test('investigation graph validates references and cycles', () => {
+  assert.deepEqual(normalizeInvestigationTasks(['Read A', 'Read B']), [
+    { id: 'task_1', question: 'Read A', dependsOn: [] }, { id: 'task_2', question: 'Read B', dependsOn: [] }
+  ]);
+  assert.throws(() => normalizeInvestigationTasks(undefined, [
+    { id: 'a', question: 'A', dependsOn: ['b'] }, { id: 'b', question: 'B', dependsOn: ['a'] }
+  ]), /cycle/);
+  assert.throws(() => normalizeInvestigationTasks(undefined, [
+    { id: 'a', question: 'A', dependsOn: ['missing'] }, { id: 'b', question: 'B' }
+  ]), /dependencies/);
+  assert.throws(() => normalizeInvestigationTasks(undefined, [
+    { id: 'a', question: 'A' }, { id: 'a', question: 'B' }
+  ]), /unique/);
+});
+
+test('delegation tool accepts a validated graph through the registry', async () => {
+  const registry = new ToolRegistry(subagentTools);
+  const graph = [{ id: 'a', question: 'Inspect A' }, { id: 'b', question: 'Inspect B', dependsOn: ['a'] }];
+  const prepared = registry.prepare('delegate_investigations', JSON.stringify({ graph }));
+  let received;
+  const result = await prepared.execute({ runInvestigations: async tasks => { received = tasks; return '{}'; } });
+  assert.equal(result.success, true);
+  assert.deepEqual(received, [{ id: 'a', question: 'Inspect A', dependsOn: [] }, { id: 'b', question: 'Inspect B', dependsOn: ['a'] }]);
+});
+
+test('cancelled graph never starts queued investigations', async () => fixture(async root => {
+  const controller = new AbortController();
+  controller.abort();
+  const events = [];
+  const graph = normalizeInvestigationTasks(undefined, [
+    { id: 'a', question: 'Inspect A' }, { id: 'b', question: 'Inspect B', dependsOn: ['a'] }
+  ]);
+  await assert.rejects(runReadOnlyInvestigations(root, graph, 'key', 'test-model', controller.signal,
+    activity => events.push([activity.id, activity.status])));
+  assert.deepEqual(events, [['a', 'queued'], ['b', 'queued'], ['a', 'cancelled'], ['b', 'cancelled']]);
+}));
+
+test('dependent investigation waits for both reports and skips after failure', async () => fixture(async root => {
+  const oldFetch = globalThis.fetch;
+  const seen = [];
+  let active = 0, peak = 0, failA = false;
+  const response = (id, answer) => new Response([
+    { type: 'response.created', response: { id } },
+    ...(answer ? [{ type: 'response.output_text.delta', delta: answer }] : []),
+    { type: 'response.completed', response: { id, usage: { input_tokens: 30, output_tokens: 5 } } }
+  ].map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n');
+  globalThis.fetch = async (_url, options) => {
+    const content = JSON.parse(options.body).input[0].content;
+    const id = content.startsWith('Inspect A') ? 'a' : content.startsWith('Inspect B') ? 'b' : 'c';
+    seen.push({ id, content });
+    active++; peak = Math.max(peak, active);
+    await new Promise(resolve => setTimeout(resolve, id === 'a' ? 20 : 10));
+    active--;
+    return response(id, id === 'a' && failA ? '' : `${id} report`);
+  };
+  const graph = normalizeInvestigationTasks(undefined, [
+    { id: 'a', question: 'Inspect A' }, { id: 'b', question: 'Inspect B' },
+    { id: 'c', question: 'Compare reports', dependsOn: ['a', 'b'] }
+  ]);
+  try {
+    const events = [];
+    const result = JSON.parse(await runReadOnlyInvestigations(root, graph, 'key', 'test-model', new AbortController().signal,
+      activity => events.push(activity)));
+    assert.equal(peak, 2);
+    assert.deepEqual(seen.map(item => item.id), ['a', 'b', 'c']);
+    assert.match(seen[2].content, /a: a report/);
+    assert.match(seen[2].content, /b: b report/);
+    assert.deepEqual(result.results.map(item => item.status), ['completed', 'completed', 'completed']);
+    assert.deepEqual(events.filter(item => item.id === 'c').map(item => item.status), ['queued', 'running', 'completed']);
+    failA = true; seen.length = 0;
+    const failed = JSON.parse(await runReadOnlyInvestigations(root, graph, 'key', 'test-model', new AbortController().signal));
+    assert.deepEqual(seen.map(item => item.id).sort(), ['a', 'b']);
+    assert.deepEqual(failed.results.map(item => item.status), ['failed', 'completed', 'skipped']);
+  } finally { globalThis.fetch = oldFetch; }
+}));
+
 test('parent agent delegates bounded investigations to isolated read-only sub-agents', async () => fixture(async root => {
   await writeFile(path.join(root, 'alpha.ts'), 'export const alpha = true;\n');
   await writeFile(path.join(root, 'beta.ts'), 'export const beta = true;\n');
@@ -471,8 +548,10 @@ test('parent agent delegates bounded investigations to isolated read-only sub-ag
     assert.match(result.content, /"inputTokens": 40/);
     const childEvents = events.filter(event => event.type === 'subagent-status' && event.id === 'delegate_1');
     assert.deepEqual(childEvents.slice(0, 2).map(event => [event.activity.index, event.activity.status]),
+      [[0, 'queued'], [1, 'queued']]);
+    assert.deepEqual(childEvents.slice(2, 4).map(event => [event.activity.index, event.activity.status]),
       [[0, 'running'], [1, 'running']]);
-    assert.deepEqual(childEvents.slice(2).map(event => [event.activity.index, event.activity.status]).sort(),
+    assert.deepEqual(childEvents.slice(4).map(event => [event.activity.index, event.activity.status]).sort(),
       [[0, 'completed'], [1, 'completed']]);
     assert.ok(childEvents.every(event => !Number.isNaN(Date.parse(event.activity.at))));
     assert.deepEqual(childEvents.filter(event => event.activity.usage).map(event => event.activity.usage),

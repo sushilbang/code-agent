@@ -62,8 +62,10 @@ export class LocalStore {
             !Number.isSafeInteger(tool.budget.limitTokens) || tool.budget.limitTokens < 1 || typeof tool.budget.estimated !== 'boolean')) ||
           (tool.children !== undefined && (!Array.isArray(tool.children) || tool.children.length > 3 || tool.children.some(child =>
             !child || !Number.isSafeInteger(child.index) || child.index < 0 || child.index > 2 ||
+            (child.id !== undefined && (typeof child.id !== 'string' || child.id.length > 32)) ||
+            (child.dependsOn !== undefined && (!Array.isArray(child.dependsOn) || child.dependsOn.length > 2 || child.dependsOn.some(id => typeof id !== 'string' || id.length > 32))) ||
             typeof child.task !== 'string' || child.task.length > 500 ||
-            !['running', 'completed', 'failed', 'cancelled'].includes(child.status) || typeof child.at !== 'string' ||
+            !['queued', 'running', 'completed', 'failed', 'skipped', 'cancelled'].includes(child.status) || typeof child.at !== 'string' ||
             (child.usage !== undefined && (!Number.isSafeInteger(child.usage.inputTokens) || child.usage.inputTokens < 0 ||
               !Number.isSafeInteger(child.usage.outputTokens) || child.usage.outputTokens < 0))))))))) ||
       (chat.contextUsage !== undefined && (!chat.contextUsage || !Number.isSafeInteger(chat.contextUsage.inputTokens) ||

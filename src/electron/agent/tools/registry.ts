@@ -41,7 +41,10 @@ function validateArguments(schema: Record<string, unknown>, arguments_: Record<s
       : expected === 'integer' ? typeof value === 'number' && Number.isInteger(value)
       : expected === 'number' ? typeof value === 'number' && Number.isFinite(value)
       : expected === 'boolean' ? typeof value === 'boolean'
-      : expected === 'array' ? Array.isArray(value) && value.every(item => typeof item === 'string')
+      : expected === 'array' ? Array.isArray(value) && value.every(item => {
+        const itemType = (property as { items?: { type?: unknown } }).items?.type;
+        return itemType === 'object' ? Boolean(item) && typeof item === 'object' && !Array.isArray(item) : typeof item === 'string';
+      })
       : true;
     if (!valid) throw new Error(`Invalid tool argument: ${name} must be ${String(expected)}.`);
   }

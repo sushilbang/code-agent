@@ -460,6 +460,7 @@ export default function App() {
               {tool.budget && <div className="subagent-budget">Subagent run budget: {tool.budget.estimated ? '~' : ''}{tool.budget.usedTokens.toLocaleString()} / {tool.budget.limitTokens.toLocaleString()} tokens</div>}
               {tool.children && <ol className="subagent-timeline" aria-label="Delegated investigations">{tool.children.map(child => <li key={child.index}>
                 <span className={`subagent-state ${child.status}`}>{child.status}</span><span className="subagent-task">{child.task}</span>
+                {child.dependsOn && child.dependsOn.length > 0 && <small>after {child.dependsOn.join(', ')}</small>}
                 <small>{new Date(child.at).toLocaleTimeString()}{child.usage ? ` · ${child.usage.inputTokens + child.usage.outputTokens} tokens` : ''}</small>
               </li>)}</ol>}
               {tool.diff && <DiffView diff={tool.diff} />}

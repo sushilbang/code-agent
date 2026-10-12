@@ -35,8 +35,10 @@ export interface AgentApprovalRequest {
 export type ApprovalDecision = 'once' | 'always' | 'deny';
 export interface SubAgentActivity {
   index: number;
+  id?: string;
+  dependsOn?: string[];
   task: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled';
   at: string;
   usage?: { inputTokens: number; outputTokens: number };
 }

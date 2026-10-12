@@ -119,7 +119,8 @@ button:disabled{cursor:default;opacity:.48}
 .subagent-timeline li{display:flex;align-items:baseline;gap:7px;padding:5px 0;flex-wrap:wrap}
 .subagent-state{text-transform:capitalize;color:#b5bfc3;min-width:57px}
 .subagent-state.completed{color:#8fab9f}
-.subagent-state.failed,.subagent-state.cancelled{color:#df9287}
+.subagent-state.queued{color:#93a5ad}
+.subagent-state.failed,.subagent-state.cancelled,.subagent-state.skipped{color:#df9287}
 .subagent-task{flex:1;min-width:120px;overflow-wrap:anywhere}
 .subagent-timeline small{color:#8f9ba0}
 .modal-backdrop{position:absolute;inset:0;z-index:10;background:#0009;display:grid;place-items:center}
