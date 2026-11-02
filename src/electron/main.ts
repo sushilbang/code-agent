@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol, safeStorage } from 'electron';
 import type { AgentApprovalRequest, AgentRequest, ApprovalDecision, ChatRecord, ProjectMemoryInput } from '../shared/types';
 import { isContextSettings } from '../shared/context';
 import { DEFAULT_OPENAI_MODEL, isOpenAIModel } from '../shared/models';
@@ -72,6 +72,8 @@ async function requestWriteApproval(runId: string, change: ApprovalTarget, tool:
   });
 }
 
+nativeTheme.themeSource = 'dark';
+
 app.whenReady().then(async () => {
   store = new LocalStore(app.getPath('userData'));
   memoryStore = new ProjectMemoryStore(app.getPath('userData'));
@@ -113,7 +115,7 @@ app.whenReady().then(async () => {
 
   mainWindow = new BrowserWindow({
     width: 1480, height: 900, minWidth: 1020, minHeight: 620,
-    backgroundColor: '#11151a',
+    backgroundColor: '#09090b',
     title: 'Code Agent',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
