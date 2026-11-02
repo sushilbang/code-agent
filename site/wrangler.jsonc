@@ -2,5 +2,5 @@
   "name": "code-agent-site",
   "compatibility_date": "2026-11-01",
   "assets": { "directory": "./public" },
-  "routes": [{ "pattern": "agent.sushilbang.com", "custom_domain": true }]
+  "routes": [{ "pattern": "code-agent.sushilbang.com", "custom_domain": true }]
 }
