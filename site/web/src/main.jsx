@@ -1,163 +1,205 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, animate, useMotionValueEvent } from 'framer-motion';
+import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import './style.css';
 
 const VERSION = '0.2.0';
 const DOWNLOAD = `/download/Code-Agent-${VERSION}-win-x64.exe`;
+const SHA = 'fac9642510844cb0829b2efbd41a5f7a975c1b86018f2015b41054c4dd5c3ed8';
 const REPO = 'https://github.com/sushilbang/code-agent';
 const ease = [0.22, 1, 0.36, 1];
 
-const fadeUp = { hidden: { opacity: 0, y: 24 }, show: i => ({ opacity: 1, y: 0, transition: { duration: 0.7, ease, delay: i * 0.08 } }) };
-
-function Reveal({ children, i = 0, className }) {
-  return <motion.div className={className} variants={fadeUp} custom={i} initial="hidden" whileInView="show" viewport={{ once: true, margin: '-60px' }}>{children}</motion.div>;
+/* Slow-drifting colour fields with film grain. */
+function GradientBg() {
+  return (
+    <div className="gbg" aria-hidden="true">
+      <i className="blob b1" /><i className="blob b2" /><i className="blob b3" /><i className="blob b4" />
+      <svg className="grain" width="100%" height="100%"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" stitchTiles="stitch" /><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0" /></filter><rect width="100%" height="100%" filter="url(#n)" /></svg>
+    </div>
+  );
 }
 
-function Counter({ to, suffix = '' }) {
+/* Words light up as the paragraph scrolls through the viewport. *word* marks an accent. */
+function ScrollReveal({ text }) {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true });
-  const v = useMotionValue(0);
-  useMotionValueEvent(v, 'change', n => { if (ref.current) ref.current.textContent = Math.round(n) + suffix; });
-  useEffect(() => { if (inView) animate(v, to, { duration: 1.4, ease }); }, [inView]);
-  return <span ref={ref}>0{suffix}</span>;
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.8', 'end 0.45'] });
+  const words = text.split(' ');
+  return (
+    <p className="reveal" ref={ref}>
+      {words.map((raw, i) => {
+        const accent = raw.startsWith('*');
+        return <Word key={i} progress={scrollYProgress} range={[i / words.length, (i + 1) / words.length]} accent={accent}>{raw.replaceAll('*', '')}</Word>;
+      })}
+    </p>
+  );
+}
+function Word({ children, progress, range, accent }) {
+  const opacity = useTransform(progress, range, [0.16, 1]);
+  return <><motion.span style={{ opacity }} className={accent ? 'acc' : ''}>{children}</motion.span>{' '}</>;
+}
+
+function Rise({ children, delay = 0, className, as = 'div' }) {
+  const Tag = motion[as];
+  return <Tag className={className} initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }} transition={{ duration: 0.8, ease, delay }}>{children}</Tag>;
 }
 
 function Nav() {
   const { scrollY } = useScroll();
-  const bg = useTransform(scrollY, [0, 80], ['rgba(9,9,11,0)', 'rgba(9,9,11,0.82)']);
-  const line = useTransform(scrollY, [0, 80], ['rgba(30,30,37,0)', 'rgba(30,30,37,1)']);
+  const bg = useTransform(scrollY, [0, 80], ['rgba(10,9,8,0)', 'rgba(10,9,8,0.8)']);
   return (
-    <motion.header className="nav" style={{ background: bg, borderBottomColor: line }} initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.6, ease }}>
-      <a className="logo" href="#top"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 8l-5 4 5 4M16 8l5 4-5 4" /></svg>Code Agent</a>
+    <motion.header className="nav" style={{ background: bg }}>
+      <a className="logo" href="#top"><span className="mark">{'</>'}</span> Code Agent</a>
       <nav>
-        <a href="#features">Features</a><a href="#safety">Safety</a><a href="#faq">FAQ</a>
-        <a className="btn primary sm" href={DOWNLOAD}>Download</a>
+        <a href="#how">How it works</a><a href="#features">Features</a><a href="#safety">Safety</a><a href="#faq">FAQ</a>
+        <a className="pill" href={DOWNLOAD}>Download</a>
       </nav>
     </motion.header>
   );
 }
 
 function Hero() {
-  const words = ['A', 'coding', 'agent', 'you', 'can'];
+  const lines = ['A coding agent', 'you can '];
   return (
     <section className="hero" id="top">
-      <motion.p className="eyebrow" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease }}>v{VERSION} · Windows · Electron + Monaco</motion.p>
-      <h1>
-        {words.map((w, i) => <motion.span key={i} className="word" initial={{ opacity: 0, y: 40, filter: 'blur(8px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 0.8, ease, delay: 0.1 + i * 0.07 }}>{w}&nbsp;</motion.span>)}
-        <motion.em className="word" initial={{ opacity: 0, y: 40, filter: 'blur(8px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 0.8, ease, delay: 0.55 }}>audit.</motion.em>
-      </h1>
-      <motion.p className="lede" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease, delay: 0.7 }}>
-        A local editor with an agent that reads your repository, proposes changes as diffs, and waits for your approval. Model requests and secrets never leave the main process.
-      </motion.p>
-      <motion.div className="cta" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease, delay: 0.85 }}>
-        <motion.a className="btn primary lg" href={DOWNLOAD} whileHover={{ y: -2, scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 20h16" /></svg>
-          Download for Windows
-        </motion.a>
-        <motion.a className="btn ghost lg" href={REPO} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>View source</motion.a>
-      </motion.div>
-      <motion.p className="fine" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }}>Portable .exe · 114 MB · no install · unsigned build</motion.p>
+      <GradientBg />
+      <div className="wrap">
+        <motion.p className="kicker" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>Desktop app for Windows — v{VERSION}</motion.p>
+        <h1>
+          {lines.map((l, i) => <span className="line" key={i}><motion.span style={{ display: 'inline-block' }} initial={{ y: '110%' }} animate={{ y: 0 }} transition={{ duration: 1, ease, delay: 0.15 + i * 0.12 }}>{l}{i === 1 && <em>audit.</em>}</motion.span></span>)}
+        </h1>
+        <motion.p className="sub" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease, delay: 0.55 }}>
+          An editor and an agent in one window. It reads your repository, proposes every change as a diff, and does nothing until you say so.
+        </motion.p>
+        <motion.div className="cta" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease, delay: 0.7 }}>
+          <a className="btn solid" href={DOWNLOAD}>Download for Windows <span>↓</span></a>
+          <a className="btn line" href={REPO}>Source on GitHub</a>
+        </motion.div>
+      </div>
     </section>
   );
 }
 
 function Showcase() {
   const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'center center'] });
-  const p = useSpring(scrollYProgress, { stiffness: 90, damping: 25 });
-  const rotateX = useTransform(p, [0, 1], [22, 0]);
-  const scale = useTransform(p, [0, 1], [0.88, 1]);
-  const opacity = useTransform(p, [0, 0.4], [0.3, 1]);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.95', 'start 0.35'] });
+  const p = useSpring(scrollYProgress, { stiffness: 80, damping: 26 });
+  const y = useTransform(p, [0, 1], [60, 0]);
+  const scale = useTransform(p, [0, 1], [0.94, 1]);
   return (
-    <section className="showcase" ref={ref} style={{ perspective: 1400 }}>
-      <motion.div className="frame" style={{ rotateX, scale, opacity, transformOrigin: '50% 100%' }}>
-        <div className="frame-bar"><i /><i /><i /><span>Code Agent</span></div>
+    <section className="showcase wrap" ref={ref}>
+      <motion.figure style={{ y, scale }}>
         <video src="media/demo.mp4" poster="media/poster.png" autoPlay muted loop playsInline preload="metadata" />
-      </motion.div>
-      <p className="fine">Animated walkthrough rendered from the app's real interface styles.</p>
+        <figcaption>Scripted walkthrough, rendered with the app's own stylesheet.</figcaption>
+      </motion.figure>
     </section>
   );
 }
 
-const FEATURES = [
-  ['⌥', 'Reviewable by default', 'Every file mutation shows a contextual unified diff with Reject, Allow once, and Always allow. The diff stays in the chat afterward.'],
-  ['⑂', 'Bounded sub-agents', 'Two or three read-only investigations run in parallel or as a small dependency graph, with isolated context and a shared token budget.'],
-  ['◧', 'Context you can see', 'A live token indicator, configurable compaction thresholds, and a record of every file excerpt and memory item sent to the model.'],
-  ['✎', 'Project memory', 'Workspace-scoped facts and decisions you control. Add, edit, disable, or delete; credential-looking text is rejected on save.'],
-  ['›_', 'Approved commands', 'Executables run directly with an argument array, never through an implicit shell, with timeouts and process-tree cancellation.'],
-  ['⎇', 'Git-aware', 'Structured status plus bounded staged and unstaged diffs are available to the agent as read-only tools.'],
-  ['❖', 'Monaco editor', 'Tabs, unsaved-change protection, and saves that refuse to overwrite files that changed on disk.'],
-  ['↻', 'Local chats', 'Conversations, permissions, and memory persist in local app data and remember their folder.']
+function Manifesto() {
+  return (
+    <section className="manifesto wrap">
+      <ScrollReveal text="Most coding agents ask you to trust them. Code Agent asks you to *read* them. Every file change arrives as a *diff*, every command waits for a *yes*, and your keys never leave the *main process*." />
+    </section>
+  );
+}
+
+const STEPS = [
+  ['01', 'Ask', 'Describe the change in plain language. The agent searches, globs and reads the repository, with file excerpts and project memory shown on the message.'],
+  ['02', 'Review', 'Edits arrive as a unified diff inside the chat — current file, proposed file and the diff itself — before anything is written.'],
+  ['03', 'Decide', 'Reject, allow once, or always allow that action in that folder. Always-allow can be revoked from the settings panel.']
 ];
 
-function Features() {
+function How() {
   return (
-    <section id="features" className="section">
-      <Reveal><h2>Built for people who read the diff.</h2></Reveal>
-      <div className="grid">
-        {FEATURES.map(([ico, title, text], i) => (
-          <motion.article key={title} className="card" variants={fadeUp} custom={i % 4} initial="hidden" whileInView="show" viewport={{ once: true, margin: '-40px' }} whileHover={{ y: -4 }}>
-            <span className="ico">{ico}</span><h3>{title}</h3><p>{text}</p>
-          </motion.article>
+    <section id="how" className="section wrap">
+      <Rise as="h2" className="h2">How an edit happens</Rise>
+      <div className="steps">
+        {STEPS.map(([n, t, d], i) => (
+          <Rise key={n} delay={i * 0.1} className="step"><span className="num">{n}</span><h3>{t}</h3><p>{d}</p></Rise>
         ))}
       </div>
     </section>
   );
 }
 
-function Safety() {
-  const items = ['API key encrypted with the OS credential store (safeStorage)', 'Only key availability is returned to the renderer', 'No generic IPC or Node.js access in the renderer', 'Deletions confirmed and bounded to 200 entries / 10 MB', 'Chats and memory stay in local app data'];
+const FEATURES = [
+  ['Reviewable diffs', 'Contextual unified diffs for every file mutation, kept in the chat after the action succeeds.'],
+  ['Read-only sub-agents', 'Two or three investigations at once, or a small dependency graph. Isolated context, read and search tools only, one shared token budget.'],
+  ['Visible context', 'A token indicator for the latest request, configurable warning and compaction thresholds, and a list of every excerpt and memory item sent.'],
+  ['Project memory', 'Facts and decisions scoped to a workspace. Edit, disable or delete them; credential-like text is rejected on save.'],
+  ['Approved commands', 'Run an executable with an argument array — no implicit shell — inside the workspace, with timeouts and process-tree cancellation.'],
+  ['Git inspection', 'Structured status and bounded staged or unstaged diffs, available to the agent as read-only tools.'],
+  ['Monaco editor', 'Tabs, unsaved-change prompts, and saves that refuse to overwrite a file that changed on disk.'],
+  ['Local history', 'Chats, permissions and memory live in local app data; each chat remembers its folder.']
+];
+
+function Features() {
   return (
-    <section id="safety" className="section split">
-      <Reveal>
-        <h2>Security is the architecture.</h2>
-        <p className="muted">Electron's renderer, preload, and main-process boundary is preserved. The renderer gets a small typed API, nothing more.</p>
-        <div className="stats">
-          <div><b><Counter to={41} /></b><span>automated tests</span></div>
-          <div><b><Counter to={3} /></b><span>approval choices</span></div>
-          <div><b><Counter to={0} /></b><span>secrets in the renderer</span></div>
-        </div>
-      </Reveal>
-      <ul className="checks">
-        {items.map((t, i) => <motion.li key={t} initial={{ opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, ease, delay: i * 0.08 }}>{t}</motion.li>)}
+    <section id="features" className="section wrap split">
+      <div className="sticky"><Rise as="h2" className="h2">What is in the box</Rise><Rise delay={0.1} className="lead">Everything runs locally except the model request itself.</Rise></div>
+      <ul className="rows">
+        {FEATURES.map(([t, d], i) => (
+          <motion.li key={t} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-40px' }} transition={{ duration: 0.7, ease }}>
+            <span className="idx">{String(i + 1).padStart(2, '0')}</span><div><h3>{t}</h3><p>{d}</p></div>
+          </motion.li>
+        ))}
       </ul>
+    </section>
+  );
+}
+
+const SAFETY = [
+  ['API key', 'Encrypted with the OS credential store (Electron safeStorage). The renderer only learns whether a key exists.'],
+  ['Process boundary', 'Context-isolated preload with a small typed API. No generic IPC, no Node.js in the renderer.'],
+  ['File writes', 'Refuse to overwrite a file that changed on disk since it was opened.'],
+  ['Deletes', 'Confirmed, rechecked, and limited to 200 entries and 10 MB.'],
+  ['Storage', 'Chats, permissions and project memory stay in local app data. Memory is not encrypted — do not store secrets in it.']
+];
+
+function Safety() {
+  return (
+    <section id="safety" className="section wrap">
+      <Rise as="h2" className="h2">Where the lines are drawn</Rise>
+      <dl className="spec">
+        {SAFETY.map(([k, v], i) => <Rise key={k} delay={i * 0.05} className="spec-row"><dt>{k}</dt><dd>{v}</dd></Rise>)}
+      </dl>
     </section>
   );
 }
 
 function Download() {
   return (
-    <section id="download" className="section">
-      <Reveal className="dl">
-        <div>
-          <h2>Run it in a minute.</h2>
-          <p className="muted">Download the portable build, double-click, open a folder, and add an OpenAI key from the key icon. Local inspection works without a key.</p>
-          <motion.a className="btn primary lg" href={DOWNLOAD} whileHover={{ y: -2, scale: 1.02 }} whileTap={{ scale: 0.98 }}>Download Code-Agent-{VERSION}.exe</motion.a>
-          <p className="fine left">Windows 10/11 x64 · 114 MB · portable</p>
-        </div>
-        <div className="term">
-          <div className="term-bar"><i /><i /><i /><span>or build from source</span></div>
-          <pre><span className="p">PS&gt;</span> git clone {REPO}.git{'\n'}<span className="p">PS&gt;</span> cd code-agent{'\n'}<span className="p">PS&gt;</span> npm.cmd install{'\n'}<span className="p">PS&gt;</span> npm.cmd start</pre>
-        </div>
-      </Reveal>
+    <section id="download" className="dl">
+      <GradientBg />
+      <div className="wrap dl-in">
+        <Rise as="h2" className="h2 big">Try it on a repo<br />you care about.</Rise>
+        <Rise delay={0.1} className="dl-card">
+          <a className="btn solid" href={DOWNLOAD}>Download Code-Agent-{VERSION}.exe <span>↓</span></a>
+          <dl className="meta">
+            <div><dt>Platform</dt><dd>Windows 10/11, x64</dd></div>
+            <div><dt>Size</dt><dd>114 MB, portable, no installer</dd></div>
+            <div><dt>SHA-256</dt><dd className="mono">{SHA}</dd></div>
+            <div><dt>Signing</dt><dd>Unsigned — SmartScreen will warn</dd></div>
+          </dl>
+        </Rise>
+      </div>
     </section>
   );
 }
 
 const FAQ = [
-  ['Why does Windows warn me?', 'The build is not code-signed. SmartScreen shows "Windows protected your PC" — choose More info, then Run anyway, or build from source.'],
-  ['Where does my API key go?', 'It is encrypted with the operating system credential store and kept in the main process. The renderer only learns whether a key exists.'],
-  ['Can the agent change files without asking?', 'Not unless you choose Always allow for a specific action in a specific folder. You can revoke it any time.'],
-  ['Which models are supported?', 'OpenAI models from a fixed allowlist, plus a local inspection mode that needs no key.']
+  ['Why does Windows warn me?', 'The build is not code-signed. Choose More info, then Run anyway — or verify the SHA-256 above, or build from source.'],
+  ['Can the agent change files without asking?', 'Only for an action you marked Always allow, in the folder where you marked it. You can revoke it at any time.'],
+  ['Which models can I use?', 'OpenAI models from a fixed allowlist, chosen in the composer. Local inspection mode needs no key.'],
+  ['How do I build it myself?', 'Install Node.js 22+, clone the repo, run npm install then npm start.']
 ];
 
 function Faq() {
   return (
-    <section id="faq" className="section">
-      <Reveal><h2>Questions</h2></Reveal>
+    <section id="faq" className="section wrap split">
+      <Rise as="h2" className="h2">Questions</Rise>
       <div className="faq">
-        {FAQ.map(([q, a], i) => <Reveal key={q} i={i}><details><summary>{q}</summary><p>{a}</p></details></Reveal>)}
+        {FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}
       </div>
     </section>
   );
@@ -167,10 +209,8 @@ function App() {
   return (
     <>
       <Nav />
-      <main>
-        <Hero /><Showcase /><Features /><Safety /><Download /><Faq />
-      </main>
-      <footer className="foot"><span>© {new Date().getFullYear()} Code Agent</span><a href="https://sushilbang.com">sushilbang.com</a></footer>
+      <main><Hero /><Showcase /><Manifesto /><How /><Features /><Safety /><Download /><Faq /></main>
+      <footer className="foot wrap"><span>Code Agent {VERSION}</span><span><a href={REPO}>GitHub</a> · <a href="https://sushilbang.com">sushilbang.com</a></span></footer>
     </>
   );
 }
