@@ -1,19 +1,26 @@
-import React, { useRef } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { motion, useScroll, useTransform, useInView } from 'framer-motion';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import './style.css';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const VERSION = '0.2.0';
 const DOWNLOAD = `/download/Code-Agent-${VERSION}-win-x64.exe`;
 const SHA = 'db52ed94103654e6e3a9aca5433584928ed27a7d84f77468e869a2496447afc1';
 const REPO = 'https://github.com/sushilbang/code-agent';
-const ease = [0.22, 1, 0.36, 1];
 
 /* Plays only while on screen, so offscreen videos cost nothing. */
 function Video(props) {
   const ref = useRef(null);
-  const inView = useInView(ref, { margin: '120px' });
-  React.useEffect(() => { const v = ref.current; if (!v) return; if (inView) v.play().catch(() => {}); else v.pause(); }, [inView]);
+  useLayoutEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) v.play().catch(() => {}); else v.pause(); }, { rootMargin: '120px' });
+    io.observe(v);
+    return () => io.disconnect();
+  }, []);
   return <video ref={ref} muted loop playsInline preload="metadata" {...props} />;
 }
 
@@ -27,61 +34,42 @@ function GradientBg() {
   );
 }
 
-/* Words light up as the paragraph scrolls through the viewport. *word* marks an accent. */
+/* *word* marks an accent. Each word is a span so GSAP can light them up on scroll. */
 function ScrollReveal({ text }) {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.8', 'end 0.45'] });
-  const words = text.split(' ');
   return (
-    <p className="reveal" ref={ref}>
-      {words.map((raw, i) => {
-        const accent = raw.startsWith('*');
-        return <Word key={i} progress={scrollYProgress} range={[i / words.length, (i + 1) / words.length]} accent={accent}>{raw.replaceAll('*', '')}</Word>;
-      })}
+    <p className="reveal">
+      {text.split(' ').map((raw, i) => <React.Fragment key={i}><span className={`w${raw.startsWith('*') ? ' acc' : ''}`}>{raw.replaceAll('*', '')}</span>{' '}</React.Fragment>)}
     </p>
   );
 }
-function Word({ children, progress, range, accent }) {
-  const opacity = useTransform(progress, range, [0.16, 1]);
-  return <><motion.span style={{ opacity }} className={accent ? 'acc' : ''}>{children}</motion.span>{' '}</>;
-}
-
-function Rise({ children, delay = 0, className, as = 'div' }) {
-  const Tag = motion[as];
-  return <Tag className={className} initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }} transition={{ duration: 0.8, ease, delay }}>{children}</Tag>;
-}
 
 function Nav() {
-  const { scrollY } = useScroll();
-  const bg = useTransform(scrollY, [0, 80], ['rgba(10,9,8,0)', 'rgba(10,9,8,0.92)']);
   return (
-    <motion.header className="nav" style={{ background: bg }}>
+    <header className="nav">
       <a className="logo" href="#top"><img className="mark" src="favicon.svg" alt="" width="28" height="28" /> Code Agent</a>
       <nav>
         <a href="#how">How it works</a><a href="#features">Features</a><a href="#safety">Safety</a><a href="#faq">FAQ</a>
         <a className="pill" href={DOWNLOAD}>Download</a>
       </nav>
-    </motion.header>
+    </header>
   );
 }
 
 function Hero() {
-  const lines = ['A coding agent', 'you can '];
   return (
     <section className="hero" id="top">
       <GradientBg />
       <div className="wrap">
-        <motion.p className="kicker" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>Desktop app for Windows — v{VERSION}</motion.p>
+        <p className="kicker">Desktop app for Windows — v{VERSION}</p>
         <h1>
-          {lines.map((l, i) => <span className="line" key={i}><motion.span style={{ display: 'inline-block' }} initial={{ y: '110%' }} animate={{ y: 0 }} transition={{ duration: 1, ease, delay: 0.15 + i * 0.12 }}>{l}{i === 1 && <em>audit.</em>}</motion.span></span>)}
+          <span className="line"><span>A coding agent</span></span>
+          <span className="line"><span>you can <em>audit.</em></span></span>
         </h1>
-        <motion.p className="sub" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease, delay: 0.55 }}>
-          An editor and an agent in one window. It reads your repository, proposes every change as a diff, and does nothing until you say so.
-        </motion.p>
-        <motion.div className="cta" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease, delay: 0.7 }}>
+        <p className="sub">An editor and an agent in one window. It reads your repository, proposes every change as a diff, and does nothing until you say so.</p>
+        <div className="cta">
           <a className="btn solid" href={DOWNLOAD}>Download for Windows <span>↓</span></a>
           <a className="btn line" href={REPO}>Source on GitHub</a>
-        </motion.div>
+        </div>
       </div>
     </section>
   );
@@ -115,10 +103,11 @@ const STEPS = [
 function How() {
   return (
     <section id="how" className="section wrap">
-      <Rise as="h2" className="h2">How an edit happens</Rise>
+      <h2 className="h2">How an edit happens</h2>
       <div className="steps">
-        {STEPS.map(([n, t, d], i) => (
-          <Rise key={n} delay={i * 0.1} className="step"><span className="num">{n}</span><h3>{t}</h3><p>{d}</p></Rise>
+        <div className="rule" aria-hidden="true" />
+        {STEPS.map(([n, t, d]) => (
+          <div key={n} className="step"><span className="num">{n}</span><h3>{t}</h3><p>{d}</p></div>
         ))}
       </div>
     </section>
@@ -156,12 +145,12 @@ function FeatureRow({ f, i }) {
   const flip = i % 2 === 1;
   return (
     <div className={`frow ${flip ? 'flip' : ''}`}>
-      <Rise className="ftext">
+      <div className="ftext">
         <span className="idx">{String(i + 1).padStart(2, '0')} / {String(FEATURES.length).padStart(2, '0')}</span>
         <h3>{f.title}</h3>
         <p className="fp">{f.text}</p>
         <ul>{f.points.map(p => <li key={p}>{p}</li>)}</ul>
-      </Rise>
+      </div>
       <div className="fmedia">
         {f.video
           ? <Video src={`media/${f.video}`} poster={`media/f-${f.media}.webp`} aria-label={f.alt} />
@@ -174,8 +163,8 @@ function FeatureRow({ f, i }) {
 function Features() {
   return (
     <section id="features" className="section wrap">
-      <Rise as="h2" className="h2">What is in the box</Rise>
-      <Rise delay={0.1} className="lead wide">Everything runs locally except the model request itself. Here is each part, in the app.</Rise>
+      <h2 className="h2">What is in the box</h2>
+      <p className="lead wide">Everything runs locally except the model request itself. Here is each part, in the app.</p>
       <div className="frows">{FEATURES.map((f, i) => <FeatureRow key={f.title} f={f} i={i} />)}</div>
     </section>
   );
@@ -192,9 +181,10 @@ const SAFETY = [
 function Safety() {
   return (
     <section id="safety" className="section wrap">
-      <Rise as="h2" className="h2">Where the lines are drawn</Rise>
+      <h2 className="h2">Where the lines are drawn</h2>
       <dl className="spec">
-        {SAFETY.map(([k, v], i) => <Rise key={k} delay={i * 0.05} className="spec-row"><dt>{k}</dt><dd>{v}</dd></Rise>)}
+        <div className="rule" aria-hidden="true" />
+        {SAFETY.map(([k, v]) => <div key={k} className="spec-row"><dt>{k}</dt><dd>{v}</dd></div>)}
       </dl>
     </section>
   );
@@ -205,8 +195,8 @@ function Download() {
     <section id="download" className="dl">
       <GradientBg />
       <div className="wrap dl-in">
-        <Rise as="h2" className="h2 big">Try it on a repo<br />you care about.</Rise>
-        <Rise delay={0.1} className="dl-card">
+        <h2 className="h2 big">Try it on a repo<br />you care about.</h2>
+        <div className="dl-card">
           <a className="btn solid" href={DOWNLOAD}>Download Code-Agent-{VERSION}.exe <span>↓</span></a>
           <dl className="meta">
             <div><dt>Platform</dt><dd>Windows 10/11, x64</dd></div>
@@ -214,7 +204,7 @@ function Download() {
             <div><dt>SHA-256</dt><dd className="mono">{SHA}</dd></div>
             <div><dt>Signing</dt><dd>Unsigned — SmartScreen will warn</dd></div>
           </dl>
-        </Rise>
+        </div>
       </div>
     </section>
   );
@@ -230,21 +220,90 @@ const FAQ = [
 function Faq() {
   return (
     <section id="faq" className="section wrap split">
-      <Rise as="h2" className="h2">Questions</Rise>
+      <h2 className="h2">Questions</h2>
       <div className="faq">
-        {FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}
+        {FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><div className="ans"><p>{a}</p></div></details>)}
       </div>
     </section>
   );
 }
 
+/* All motion lives here. Only transform and opacity are animated, except one-shot clip-paths. */
+function useMotion(root) {
+  useLayoutEffect(() => {
+    const mm = gsap.matchMedia();
+    mm.add('(prefers-reduced-motion: no-preference)', () => {
+      const q = s => gsap.utils.toArray(s, root.current);
+      const once = (trigger, start = 'top 85%') => ({ trigger, start, once: true });
+
+      // Nav turns solid after the first screen of scrolling.
+      ScrollTrigger.create({ start: 80, end: 'max', toggleClass: { targets: root.current.querySelector('.nav'), className: 'on' } });
+
+      // Hero entrance.
+      gsap.timeline({ defaults: { ease: 'expo.out' } })
+        .from('.hero .kicker', { opacity: 0, y: 14, duration: 0.9 })
+        .from('.hero h1 .line > span', { yPercent: 115, duration: 1.3, stagger: 0.12 }, 0.1)
+        .from('.hero .sub', { opacity: 0, y: 18, duration: 1 }, 0.55)
+        .from('.hero .cta > *', { opacity: 0, y: 18, duration: 0.9, stagger: 0.08 }, 0.7);
+
+      // Manifesto: words light up as you scroll through the paragraph.
+      gsap.fromTo('.reveal .w', { opacity: 0.16 }, {
+        opacity: 1, ease: 'none', stagger: 0.12,
+        scrollTrigger: { trigger: '.reveal', start: 'top 80%', end: 'bottom 45%', scrub: true }
+      });
+
+      // Section headings and lead text.
+      q('.h2').forEach(h => gsap.from(h, { opacity: 0, y: 36, duration: 1, ease: 'expo.out', scrollTrigger: once(h) }));
+      q('.lead').forEach(p => gsap.from(p, { opacity: 0, y: 20, duration: 0.9, delay: 0.1, ease: 'expo.out', scrollTrigger: once(p) }));
+
+      // Hairlines draw in, then their items follow.
+      q('.rule').forEach(r => gsap.from(r, { scaleX: 0, transformOrigin: 'left center', duration: 1.2, ease: 'expo.inOut', scrollTrigger: once(r.parentElement) }));
+      gsap.from('.step', { opacity: 0, y: 30, duration: 0.9, stagger: 0.12, ease: 'expo.out', scrollTrigger: once('.steps') });
+      gsap.from('.spec-row', { opacity: 0, x: -24, duration: 0.8, stagger: 0.08, ease: 'expo.out', scrollTrigger: once('.spec') });
+
+      // Feature rows: text staggers up, the screenshot unmasks.
+      q('.frow').forEach(row => {
+        const tl = gsap.timeline({ defaults: { ease: 'expo.out' }, scrollTrigger: once(row, 'top 78%') });
+        tl.from(row.querySelectorAll('.idx, h3, .fp'), { opacity: 0, y: 28, duration: 1, stagger: 0.09 })
+          .from(row.querySelectorAll('li'), { opacity: 0, x: -14, duration: 0.8, stagger: 0.07 }, 0.35)
+          .fromTo(row.querySelector('.fmedia'), { clipPath: 'inset(7% 7% 7% 7% round 14px)', opacity: 0, scale: 1.05 },
+            { clipPath: 'inset(0% 0% 0% 0% round 12px)', opacity: 1, scale: 1, duration: 1.4 }, 0);
+      });
+
+      // Download block.
+      gsap.from('.dl-card', { opacity: 0, y: 40, duration: 1.1, ease: 'expo.out', scrollTrigger: once('.dl-card', 'top 88%') });
+      gsap.from('.meta > div', { opacity: 0, y: 12, duration: 0.7, stagger: 0.08, ease: 'power3.out', scrollTrigger: once('.dl-card', 'top 80%') });
+
+      // FAQ: answers ease open instead of snapping.
+      q('.faq details').forEach(d => {
+        const ans = d.querySelector('.ans');
+        d.querySelector('summary').addEventListener('click', e => {
+          e.preventDefault();
+          if (d.open) gsap.to(ans, { height: 0, opacity: 0, duration: 0.35, ease: 'power2.inOut', onComplete: () => { d.open = false; } });
+          else { d.open = true; gsap.fromTo(ans, { height: 0, opacity: 0 }, { height: 'auto', opacity: 1, duration: 0.45, ease: 'power3.out' }); }
+        });
+      });
+
+      // Buttons lean slightly toward the cursor.
+      q('.btn.solid').forEach(b => {
+        const x = gsap.quickTo(b, 'x', { duration: 0.4, ease: 'power3' }), y = gsap.quickTo(b, 'y', { duration: 0.4, ease: 'power3' });
+        b.addEventListener('mousemove', e => { const r = b.getBoundingClientRect(); x((e.clientX - r.left - r.width / 2) * 0.12); y((e.clientY - r.top - r.height / 2) * 0.25); });
+        b.addEventListener('mouseleave', () => { x(0); y(0); });
+      });
+    });
+    return () => mm.revert();
+  }, []);
+}
+
 function App() {
+  const root = useRef(null);
+  useMotion(root);
   return (
-    <>
+    <div ref={root}>
       <Nav />
       <main><Hero /><Showcase /><Manifesto /><How /><Features /><Safety /><Download /><Faq /></main>
       <footer className="foot wrap"><span>Code Agent {VERSION}</span><span><a href={REPO}>GitHub</a> · <a href="https://sushilbang.com">sushilbang.com</a></span></footer>
-    </>
+    </div>
   );
 }
 
