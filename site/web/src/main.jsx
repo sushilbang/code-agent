@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
+import Lenis from 'lenis';
 import { createRoot } from 'react-dom/client';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import './style.css';
@@ -80,17 +81,12 @@ function Hero() {
 }
 
 function Showcase() {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.95', 'start 0.35'] });
-  const p = useSpring(scrollYProgress, { stiffness: 80, damping: 26 });
-  const y = useTransform(p, [0, 1], [60, 0]);
-  const scale = useTransform(p, [0, 1], [0.94, 1]);
   return (
-    <section className="showcase wrap" ref={ref}>
-      <motion.figure style={{ y, scale }}>
+    <section className="showcase wrap">
+      <figure className="vframe">
         <video src="media/demo.mp4" poster="media/poster.png" autoPlay muted loop playsInline preload="metadata" />
-        <figcaption>Scripted walkthrough, rendered with the app's own stylesheet.</figcaption>
-      </motion.figure>
+      </figure>
+      <p className="vcap">Scripted walkthrough, rendered with the app's own stylesheet.</p>
     </section>
   );
 }
@@ -238,7 +234,19 @@ function Faq() {
   );
 }
 
+function useSmoothScroll() {
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const lenis = new Lenis({ lerp: 0.09, wheelMultiplier: 0.9, anchors: true });
+    let id;
+    const raf = t => { lenis.raf(t); id = requestAnimationFrame(raf); };
+    id = requestAnimationFrame(raf);
+    return () => { cancelAnimationFrame(id); lenis.destroy(); };
+  }, []);
+}
+
 function App() {
+  useSmoothScroll();
   return (
     <>
       <Nav />

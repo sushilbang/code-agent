@@ -8,7 +8,7 @@
   --mono:"Geist Mono","JetBrains Mono",Consolas,monospace;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;background:var(--bg)}
+html{background:var(--bg)}
 body{margin:0;background:var(--bg);color:var(--text);font:400 17px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
@@ -142,3 +142,11 @@ p{margin:0}
 .ftext li:before{content:'';position:absolute;left:0;top:.7em;width:8px;height:1px;background:var(--accent)}
 .fmedia img,.fmedia video{display:block;width:100%;height:auto;border:1px solid var(--line2);border-radius:12px;background:var(--s1);box-shadow:0 30px 90px #000b}
 @media(max-width:900px){.frow,.frow.flip{grid-template-columns:1fr;gap:28px;padding:48px 0}.frow.flip .ftext{order:0}}
+
+/* static demo video with a soft blurred border */
+.vframe{position:relative;margin:0;padding:10px;border-radius:22px;border:1px solid #ffffff1f;background:#ffffff0d;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 0 0 6px #ffffff08,0 40px 120px #000c}
+.vframe:before{content:'';position:absolute;inset:-26px;z-index:-1;border-radius:40px;background:radial-gradient(60% 80% at 20% 20%,#f5a74255,transparent 70%),radial-gradient(60% 80% at 85% 80%,#d2461f40,transparent 70%);filter:blur(34px)}
+.vframe video{display:block;width:100%;height:auto;border-radius:13px;border:1px solid var(--line2)}
+.vcap{margin:18px 0 0;font:12px var(--mono);color:var(--t3)}
+html.lenis,html.lenis body{height:auto}
+.lenis.lenis-smooth{scroll-behavior:auto!important}
