@@ -18,7 +18,7 @@ main{overflow-x:clip}
 /* nav */
 .nav{position:fixed;inset:0 0 auto 0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:16px max(28px,calc(50% - 560px));}
 .logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px}
-.mark{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--line2);border-radius:7px;color:var(--accent);font:500 11px var(--mono)}
+.mark{display:block;border-radius:7px}
 .nav nav{display:flex;align-items:center;gap:28px;font-size:14px;color:var(--t2)}
 .nav nav a:not(.pill):hover{color:var(--text)}
 .pill{padding:7px 16px;border-radius:99px;background:var(--text);color:#111;font-weight:500}

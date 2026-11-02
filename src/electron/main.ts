@@ -116,6 +116,7 @@ app.whenReady().then(async () => {
   mainWindow = new BrowserWindow({
     width: 1480, height: 900, minWidth: 1020, minHeight: 620,
     backgroundColor: '#09090b',
+    icon: path.join(__dirname, '../../build/icon.png'),
     title: 'Code Agent',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

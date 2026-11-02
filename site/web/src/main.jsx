@@ -5,7 +5,7 @@ import './style.css';
 
 const VERSION = '0.2.0';
 const DOWNLOAD = `/download/Code-Agent-${VERSION}-win-x64.exe`;
-const SHA = 'fac9642510844cb0829b2efbd41a5f7a975c1b86018f2015b41054c4dd5c3ed8';
+const SHA = 'db52ed94103654e6e3a9aca5433584928ed27a7d84f77468e869a2496447afc1';
 const REPO = 'https://github.com/sushilbang/code-agent';
 const ease = [0.22, 1, 0.36, 1];
 
@@ -56,7 +56,7 @@ function Nav() {
   const bg = useTransform(scrollY, [0, 80], ['rgba(10,9,8,0)', 'rgba(10,9,8,0.92)']);
   return (
     <motion.header className="nav" style={{ background: bg }}>
-      <a className="logo" href="#top"><span className="mark">{'</>'}</span> Code Agent</a>
+      <a className="logo" href="#top"><img className="mark" src="favicon.svg" alt="" width="28" height="28" /> Code Agent</a>
       <nav>
         <a href="#how">How it works</a><a href="#features">Features</a><a href="#safety">Safety</a><a href="#faq">FAQ</a>
         <a className="pill" href={DOWNLOAD}>Download</a>
