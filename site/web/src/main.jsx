@@ -1,7 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import Lenis from 'lenis';
+import React, { useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
+import { motion, useScroll, useTransform, useInView } from 'framer-motion';
 import './style.css';
 
 const VERSION = '0.2.0';
@@ -10,12 +9,20 @@ const SHA = 'fac9642510844cb0829b2efbd41a5f7a975c1b86018f2015b41054c4dd5c3ed8';
 const REPO = 'https://github.com/sushilbang/code-agent';
 const ease = [0.22, 1, 0.36, 1];
 
+/* Plays only while on screen, so offscreen videos cost nothing. */
+function Video(props) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { margin: '120px' });
+  React.useEffect(() => { const v = ref.current; if (!v) return; if (inView) v.play().catch(() => {}); else v.pause(); }, [inView]);
+  return <video ref={ref} muted loop playsInline preload="metadata" {...props} />;
+}
+
 /* Slow-drifting colour fields with film grain. */
 function GradientBg() {
   return (
     <div className="gbg" aria-hidden="true">
       <i className="blob b1" /><i className="blob b2" /><i className="blob b3" /><i className="blob b4" />
-      <svg className="grain" width="100%" height="100%"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" stitchTiles="stitch" /><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0" /></filter><rect width="100%" height="100%" filter="url(#n)" /></svg>
+      <i className="grain" />
     </div>
   );
 }
@@ -46,7 +53,7 @@ function Rise({ children, delay = 0, className, as = 'div' }) {
 
 function Nav() {
   const { scrollY } = useScroll();
-  const bg = useTransform(scrollY, [0, 80], ['rgba(10,9,8,0)', 'rgba(10,9,8,0.8)']);
+  const bg = useTransform(scrollY, [0, 80], ['rgba(10,9,8,0)', 'rgba(10,9,8,0.92)']);
   return (
     <motion.header className="nav" style={{ background: bg }}>
       <a className="logo" href="#top"><span className="mark">{'</>'}</span> Code Agent</a>
@@ -84,7 +91,7 @@ function Showcase() {
   return (
     <section className="showcase wrap">
       <figure className="vframe">
-        <video src="media/demo.mp4" poster="media/poster.png" autoPlay muted loop playsInline preload="metadata" />
+        <Video src="media/demo.mp4" poster="media/poster.png" />
       </figure>
       <p className="vcap">Scripted walkthrough, rendered with the app's own stylesheet.</p>
     </section>
@@ -147,22 +154,19 @@ const FEATURES = [
 
 function FeatureRow({ f, i }) {
   const flip = i % 2 === 1;
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
-  const y = useTransform(scrollYProgress, [0, 1], [40, -40]);
   return (
-    <div className={`frow ${flip ? 'flip' : ''}`} ref={ref}>
+    <div className={`frow ${flip ? 'flip' : ''}`}>
       <Rise className="ftext">
         <span className="idx">{String(i + 1).padStart(2, '0')} / {String(FEATURES.length).padStart(2, '0')}</span>
         <h3>{f.title}</h3>
         <p className="fp">{f.text}</p>
         <ul>{f.points.map(p => <li key={p}>{p}</li>)}</ul>
       </Rise>
-      <motion.div className="fmedia" style={{ y }}>
+      <div className="fmedia">
         {f.video
-          ? <video src={`media/${f.video}`} poster={`media/f-${f.media}.webp`} autoPlay muted loop playsInline preload="none" aria-label={f.alt} />
+          ? <Video src={`media/${f.video}`} poster={`media/f-${f.media}.webp`} aria-label={f.alt} />
           : <img src={`media/f-${f.media}.webp`} alt={f.alt} loading="lazy" />}
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -234,19 +238,7 @@ function Faq() {
   );
 }
 
-function useSmoothScroll() {
-  useEffect(() => {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const lenis = new Lenis({ lerp: 0.09, wheelMultiplier: 0.9, anchors: true });
-    let id;
-    const raf = t => { lenis.raf(t); id = requestAnimationFrame(raf); };
-    id = requestAnimationFrame(raf);
-    return () => { cancelAnimationFrame(id); lenis.destroy(); };
-  }, []);
-}
-
 function App() {
-  useSmoothScroll();
   return (
     <>
       <Nav />
