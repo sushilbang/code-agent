@@ -1,0 +1,121 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../src/renderer/styles.css">
+<style>
+html,body{width:1280px;height:720px;margin:0}
+.app-shell{height:720px}
+.ed{flex:1;display:flex;background:var(--bg);font:13px/21px var(--mono);padding:16px 0;overflow:hidden}
+.ln{width:48px;text-align:right;padding-right:18px;color:#4a4a55;white-space:pre}
+.code{white-space:pre;color:#d4d4dc}
+.k{color:#f5a742}.s{color:#7fe3b5}.n{color:#f59a9a}.t{color:#7aa7ff}.c{color:#5f6070;font-style:italic}.f{color:#7fe3b5}
+.hl{background:#5fd4a014;box-shadow:inset 2px 0 0 #5fd4a0;display:inline-block;width:100%}
+.hlr{background:#f27d7d14;box-shadow:inset 2px 0 0 #f27d7d;display:inline-block;width:100%}
+.press{background:var(--accent-hover)!important;transform:scale(.96)}
+.caret:after{content:'';display:inline-block;width:1px;height:14px;background:var(--accent);margin-left:1px;vertical-align:middle;animation:b 1s steps(1) infinite}
+@keyframes b{50%{opacity:0}}
+.cap{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);padding:10px 20px;border:1px solid var(--accent-line);border-radius:99px;background:#09090bee;color:var(--text);font:600 15px Inter,sans-serif;white-space:nowrap}
+</style></head>
+<body>
+<div class="app-shell editor-app" style="position:relative">
+<main class="workbench" style="grid-template-columns:230px 4px minmax(0,1fr) 4px 430px">
+  <aside class="explorer-pane">
+    <div class="pane-title"><span>EXPLORER</span></div>
+    <div class="repo-heading"><span>code-agent</span><small>212</small></div>
+    <div class="tree-scroll">
+      <div class="tree-row folder-icon" style="padding-left:8px">▾ src</div>
+      <div class="tree-row" style="padding-left:22px"><span class="folder-icon">▾</span> electron</div>
+      <div class="tree-row" style="padding-left:36px"><span class="folder-icon">▾</span> agent</div>
+      <div class="tree-row" style="padding-left:56px">runner.ts</div>
+      <div class="tree-row" id="treeSel" style="padding-left:56px">subagents.ts</div>
+      <div class="tree-row" style="padding-left:56px">context.ts</div>
+      <div class="tree-row" style="padding-left:22px"><span class="folder-icon">▸</span> renderer</div>
+      <div class="tree-row" style="padding-left:8px">package.json</div>
+      <div class="tree-row" style="padding-left:8px">README.md</div>
+    </div>
+  </aside>
+  <div class="pane-resizer"></div>
+  <section class="editor-pane">
+    <div class="editor-tabbar">
+      <div class="editor-tab" id="tab" data-at="3.6"><span>subagents.ts</span></div>
+      <span class="editor-label" id="edlabel">EDITOR</span>
+    </div>
+    <div class="editor-empty" id="edempty"><strong>Open a file</strong><span>Choose a file from the explorer</span></div>
+    <div class="ed" id="ed" style="display:none">
+      <div class="ln">1
+2
+3
+4
+5
+6
+7
+8</div>
+<div class="code"><span class="c">// Read-only investigations, bounded per run</span>
+<span class="k">import</span> { <span class="f">runReadOnly</span> } <span class="k">from</span> <span class="s">'./runReadOnly'</span>;
+
+<span id="l4"><span class="k">export const</span> <span class="t">SUBAGENT_BUDGET</span> = <span class="n">20_000</span>;</span>
+
+<span class="k">export async function</span> <span class="f">delegate</span>(tasks: <span class="t">Task</span>[]) {
+  <span class="k">return</span> Promise.<span class="f">all</span>(tasks.<span class="f">map</span>(<span class="f">runReadOnly</span>));
+}</div>
+    </div>
+  </section>
+  <div class="pane-resizer"></div>
+  <aside class="agent-pane">
+    <div class="agent-title"><div><strong>Agent</strong></div><div class="agent-controls"><select><option>OpenAI</option></select></div></div>
+    <div class="conversation" id="conv">
+      <div class="conversation-empty" id="empty"><strong>What are we working on?</strong><span>code-agent</span></div>
+      <div class="message user" data-at="2.6"><div class="message-label">You</div><div class="message-text">Raise the default sub-agent budget to 30k tokens.</div></div>
+      <div class="message" data-at="3.4"><div class="message-label">Agent</div>
+        <details class="tool-step"><summary><span>search_files · SUBAGENT_BUDGET</span><small>Done</small></summary></details>
+        <details class="tool-step" data-at="4.0"><summary><span>read_file · src/electron/agent/subagents.ts</span><small>Done</small></summary></details>
+        <div class="message-text markdown-body" data-at="4.8"><p>The default lives in one constant. I'll change it and leave the per-child limits alone.</p></div>
+      </div>
+      <section class="approval-inline" id="approval" data-at="5.8" data-out="8.2">
+        <div class="approval-inline-heading"><strong>edit file</strong><span>src/electron/agent/subagents.ts</span></div>
+        <details open><summary>Review changes</summary><div class="approval-inline-code"><div><strong>Diff</strong><div class="approval-diff"><span class="diff-line diff-hunk">@@ -4,1 +4,1 @@</span><span class="diff-line diff-remove">-export const SUBAGENT_BUDGET = 20_000;</span><span class="diff-line diff-add">+export const SUBAGENT_BUDGET = 30_000;</span></div></div></div></details>
+        <div class="approval-inline-actions"><button>Reject</button><button id="once">Allow once</button><button class="primary">Always allow</button></div>
+      </section>
+      <div class="message" data-at="8.4">
+        <details class="tool-step" open><summary><span>edit_file · src/electron/agent/subagents.ts</span><small>Done</small></summary><div class="approval-diff"><span class="diff-line diff-remove">-export const SUBAGENT_BUDGET = 20_000;</span><span class="diff-line diff-add">+export const SUBAGENT_BUDGET = 30_000;</span></div></details>
+        <details class="tool-step" data-at="9.4" open><summary><span>delegate · 2 read-only investigations</span><small>Done</small></summary>
+          <div class="subagent-budget">Subagent run budget: 6,412 / 30,000 tokens</div>
+          <ol class="subagent-timeline"><li><span class="subagent-state completed">completed</span><span class="subagent-task">Find other uses of SUBAGENT_BUDGET</span></li><li><span class="subagent-state completed">completed</span><span class="subagent-task">Check tests referencing the budget</span></li></ol></details>
+        <div class="message-text markdown-body" data-at="10.4"><p>Done. The budget is now <code>30_000</code>; no other call sites or tests needed changes.</p></div>
+      </div>
+    </div>
+    <div class="composer-wrap"><div class="composer"><textarea id="ta" style="pointer-events:none"></textarea>
+      <div class="composer-foot"><span class="composer-context">subagents.ts</span><select class="composer-model"><option>gpt-5.4</option></select><button class="send-button">↑</button></div></div></div>
+  </aside>
+</main>
+<footer class="statusbar"><span id="status">Ready</span><span id="stat"></span></footer>
+<div class="cap" id="cap"></div>
+</div>
+<script>
+const $=s=>document.querySelector(s), all=s=>[...document.querySelectorAll(s)];
+const PROMPT='Raise the default sub-agent budget to 30k tokens.';
+const caps=[[0,'A desktop workspace for a coding agent'],[2.4,'Ask in plain language'],[3.4,'It searches and reads your repository'],[5.8,'Every edit is a diff you approve'],[9.2,'Read-only sub-agents investigate in parallel'],[11,'Local-first. Keys stay in the main process.']];
+function setT(t){
+  all('[data-at]').forEach(e=>{
+    const at=+e.dataset.at,out=e.dataset.out?+e.dataset.out:1e9;
+    if(t<at||t>=out){e.style.display='none';return}
+    e.style.display='';e.style.opacity=Math.min(1,(t-at)/.3);e.style.transform=`translateY(${(1-Math.min(1,(t-at)/.3))*6}px)`;
+  });
+  // prompt typing 1.2 -> 2.4 then sent
+  const ta=$('#ta');
+  if(t<2.4){const p=Math.max(0,Math.min(1,(t-1.2)/1.1));ta.value=PROMPT.slice(0,Math.round(p*PROMPT.length));ta.className=p<1?'caret':''}else ta.value='';
+  $('#empty').style.display=t<2.6?'':'none';
+  // file open at 3.6
+  const open=t>=3.6;$('#ed').style.display=open?'flex':'none';$('#edempty').style.display=open?'none':'';$('#edlabel').style.display=open?'none':'';
+  $('#tab').classList.toggle('active',open);$('#treeSel').classList.toggle('selected',open);
+  // edit applied at 8.4
+  const l4=$('#l4');
+  if(t<5.8)l4.className='';else if(t<8.4)l4.className='hlr';else l4.className='hl';
+  l4.innerHTML=t<8.4?'<span class="k">export const</span> <span class="t">SUBAGENT_BUDGET</span> = <span class="n">20_000</span>;':'<span class="k">export const</span> <span class="t">SUBAGENT_BUDGET</span> = <span class="n">30_000</span>;';
+  $('#once').classList.toggle('press',t>7.8&&t<8.2);
+  $('#status').textContent=t<2.6?'Ready':t<8.4?'Agent working…':'Edit applied';
+  $('#stat').textContent=open?'8 lines · 0.2 KB'+(t>=8.4?' · Saved':''):'212 files';
+  const c=caps.filter(x=>t>=x[0]).pop();$('#cap').textContent=c[1];
+  const conv=$('#conv');conv.scrollTop=conv.scrollHeight;
+}
+setT(0);
+</script></body></html>

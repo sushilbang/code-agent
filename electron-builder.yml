@@ -1,0 +1,17 @@
+appId: com.sushilbang.codeagent
+productName: Code Agent
+directories:
+  output: release
+electronDist: node_modules/electron/dist
+electronVersion: 44.5.1
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+  - node_modules/diff/**
+asar: true
+win:
+  target:
+    - target: portable
+      arch: x64
+  artifactName: Code-Agent-${version}-win-x64.exe
