@@ -1,0 +1,126 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../src/renderer/styles.css">
+<style>
+html,body{width:1280px;margin:0;height:auto;overflow:visible}
+::-webkit-scrollbar{display:none}
+body{background:#000}
+.scene{position:relative;width:1280px;height:720px;overflow:hidden}
+.scene .app-shell{height:720px}
+.ed{flex:1;display:flex;background:var(--bg);font:13px/21px var(--mono);padding:16px 0;overflow:hidden}
+.ln{width:48px;text-align:right;padding-right:18px;color:#4a4a55;white-space:pre}
+.code{white-space:pre;color:#d4d4dc}
+.k{color:#f5a742}.s{color:#7fe3b5}.n{color:#f59a9a}.t{color:#7aa7ff}.c{color:#5f6070;font-style:italic}.f{color:#7fe3b5}
+.hl{background:#f5a74214;box-shadow:inset 2px 0 0 #f5a742;display:inline-block;width:100%}
+.tree-row{pointer-events:none}
+.scene .conversation{padding-top:16px}
+.git-out{font:11px/1.5 var(--mono)}
+.recent-row{border-bottom:1px solid var(--line)}
+</style></head><body>
+<div id="out"></div>
+<script>
+const TREE=`<div class="tree-row" style="padding-left:8px"><span class="folder-icon">▾</span> src</div>
+<div class="tree-row" style="padding-left:22px"><span class="folder-icon">▾</span> electron</div>
+<div class="tree-row" style="padding-left:36px"><span class="folder-icon">▾</span> agent</div>
+<div class="tree-row [SEL1]" style="padding-left:56px">runner.ts</div>
+<div class="tree-row [SEL2]" style="padding-left:56px">subagents.ts</div>
+<div class="tree-row" style="padding-left:56px">context.ts</div>
+<div class="tree-row" style="padding-left:56px">memory.ts</div>
+<div class="tree-row" style="padding-left:22px"><span class="folder-icon">▸</span> renderer</div>
+<div class="tree-row" style="padding-left:8px">package.json</div>
+<div class="tree-row" style="padding-left:8px">README.md</div>`;
+const CODE=`<span class="c">// Read-only investigations, bounded per run</span>
+<span class="k">import</span> { <span class="f">runReadOnly</span> } <span class="k">from</span> <span class="s">'./runReadOnly'</span>;
+
+<span class="hl"><span class="k">export const</span> <span class="t">SUBAGENT_BUDGET</span> = <span class="n">30_000</span>;</span>
+
+<span class="k">export async function</span> <span class="f">delegate</span>(tasks: <span class="t">Task</span>[]) {
+  <span class="k">const</span> ready = tasks.<span class="f">filter</span>(isReady);
+  <span class="k">return</span> Promise.<span class="f">all</span>(ready.<span class="f">map</span>(<span class="f">runReadOnly</span>));
+}
+
+<span class="k">function</span> <span class="f">isReady</span>(task: <span class="t">Task</span>) {
+  <span class="k">return</span> task.dependsOn.<span class="f">every</span>(done);
+}`;
+const LN=Array.from({length:12},(_,i)=>i+1).join('\n');
+const editor=(tab='subagents.ts')=>`<div class="editor-tabbar"><div class="editor-tab active"><span>${tab}</span></div></div><div class="ed"><div class="ln">${LN}</div><div class="code">${CODE}</div></div>`;
+const composer=(ctx='subagents.ts',ind='')=>`<div class="composer-wrap">${ind}<div class="composer"><textarea style="pointer-events:none" placeholder="Ask about this repository"></textarea><div class="composer-foot"><span class="composer-context">${ctx}</span><select class="composer-model"><option>gpt-5.4</option></select><button class="send-button">↑</button></div></div></div>`;
+const agent=(body,foot=composer())=>`<aside class="agent-pane"><div class="agent-title"><div><strong>Agent</strong></div><div class="agent-controls"><select><option>OpenAI</option></select></div></div><div class="conversation">${body}</div>${foot}</aside>`;
+const shell=(center,side,{sel='2',status='Ready',extra=''}={})=>`<div class="app-shell editor-app" style="position:relative"><main class="workbench" style="grid-template-columns:230px 4px minmax(0,1fr) 4px 430px">
+<aside class="explorer-pane"><div class="pane-title"><span>EXPLORER</span></div><div class="repo-heading"><span>code-agent</span><small>212</small></div><div class="tree-scroll">${TREE.replace('[SEL1]',sel==='1'?'selected':'').replace('[SEL2]',sel==='2'?'selected':'')}</div></aside>
+<div class="pane-resizer"></div><section class="editor-pane">${center}</section><div class="pane-resizer"></div>${side}</main>
+<footer class="statusbar"><span>${status}</span><span>12 lines · 0.4 KB</span></footer>${extra}</div>`;
+const user=t=>`<div class="message user"><div class="message-label">You</div><div class="message-text">${t}</div></div>`;
+const diffLines=(a)=>a.map(([c,t])=>`<span class="diff-line ${c}">${t.replace(/</g,'&lt;')}</span>`).join('');
+
+const scenes={
+// 1. diffs
+diff: shell(editor(), agent(`${user('Retry the request when the stream drops.')}
+<div class="message"><div class="message-label">Agent</div><div class="message-text markdown-body"><p>I'll wrap the call in a bounded retry and keep the abort signal intact.</p></div></div>
+<section class="approval-inline"><div class="approval-inline-heading"><strong>edit file</strong><span>src/electron/agent/providers/openai.ts</span></div>
+<details open><summary>Review changes</summary><div class="approval-inline-code"><div><strong>Diff</strong><div class="approval-diff">${diffLines([['diff-hunk','@@ -41,6 +41,14 @@ export async function request('],['diff-context',' const body = buildBody(input);'],['diff-remove','-  const response = await fetch(url, { body, signal });'],['diff-add','+  let response: Response | undefined;'],['diff-add','+  for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {'],['diff-add','+    response = await fetch(url, { body, signal });'],['diff-add','+    if (response.ok) break;'],['diff-add','+  }'],['diff-context',' return parseStream(response);']])}</div></div></div></details>
+<div class="approval-inline-actions"><button>Reject</button><button>Allow once</button><button class="primary">Always allow</button></div></section>`),{status:'Waiting for approval'}),
+// 2. sub-agents
+subagents: shell(editor(), agent(`${user('Where is the token budget enforced, and which tests cover it?')}
+<div class="message"><div class="message-label">Agent</div>
+<details class="tool-step" open><summary><span>delegate · 3 read-only investigations</span><small>Done</small></summary><div class="tool-description">Parallel where independent; dependent tasks wait for their prerequisites.</div>
+<div class="subagent-budget">Subagent run budget: 8,204 / 20,000 tokens</div>
+<ol class="subagent-timeline"><li><span class="subagent-state completed">completed</span><span class="subagent-task">1 · Find where the budget is reserved and released</span><small>9:41:02 AM · 2,310 tokens</small></li>
+<li><span class="subagent-state completed">completed</span><span class="subagent-task">2 · List tests that mention the budget</span><small>9:41:02 AM · 1,980 tokens</small></li>
+<li><span class="subagent-state completed">completed</span><span class="subagent-task">3 · Summarise gaps in coverage</span><small>after 1, 2 · 9:41:09 AM · 3,914 tokens</small></li></ol></details>
+<div class="message-text markdown-body"><p>Reservation happens in <code>subagents.ts</code> before each child request and is replaced with API usage afterward. Two tests cover it; neither exercises the cancelled path.</p></div></div>`),{status:'Done'}),
+// 3. context
+context: shell(editor(), agent(`${user('Why does the runner stop after the tool limit?')}
+<div class="message"><div class="message-label">Agent</div>
+<details class="source-block" open><summary>On-disk context · 3 excerpt(s)</summary><ul><li>src/electron/agent/runner.ts:88–131 <small>(matches "tool limit")</small></li><li>src/electron/agent/context.ts:1–40 <small>(selected file)</small></li><li>README.md:12–30 <small>(related)</small></li></ul></details>
+<details class="source-block" open><summary>Project memory · 2 item(s)</summary><ul><li>Testing approach</li><li>Turn limits</li></ul></details>
+<div class="message-text markdown-body"><p>The runner counts turns, not tool calls, and stops at the configured maximum.</p></div></div>`,
+composer('subagents.ts',`<button class="context-indicator warning" type="button"><span>Context</span><strong>61.2k / 100k</strong><span>Compacted</span><span>Near budget</span></button>`)),
+{extra:`<div class="modal-backdrop" style="background:#000000a6"><form class="create-dialog context-dialog" style="width:430px"><h2>Context usage</h2><p>The indicator shows input tokens for the latest model request. API counts replace local estimates when available. The working budget is your planning limit, not the model's maximum context window.</p><p>Latest request: 61,204 input tokens, 842 output tokens.</p><label>Working budget (tokens)</label><input value="100000"><label>Warn at (%)</label><input value="60"><label>Compact at (%)</label><input value="80"><label>Subagent budget per run (tokens)</label><input value="20000"><div class="dialog-actions"><span></span><button type="button">Cancel</button><button class="primary" type="button">Save preferences</button></div></form></div>`}),
+// 4. memory
+memory: shell(editor(), `<aside class="agent-pane"><div class="agent-title"><div><strong>Agent</strong></div><div class="agent-controls"><button class="icon-button active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></div><div class="conversation side-list memory-panel">
+<div class="memory-heading"><div><div class="side-list-title">Project memory</div><div class="side-list-context">code-agent</div></div><button>Add</button></div>
+<p class="memory-help">Facts you explicitly save here can be used in relevant future prompts. They are separate from chat history and stored locally, unencrypted. Do not save secrets.</p>
+<section class="memory-item"><div class="memory-item-title"><strong>Testing approach</strong><label><input type="checkbox" checked> Use</label></div><p>Tests build the main process first, then run node --test against temporary workspaces. Never touch the real repo.</p><small>Your note · updated 11/1/2026</small><div class="memory-actions"><button>Edit</button><button class="danger">Delete</button></div></section>
+<section class="memory-item"><div class="memory-item-title"><strong>Turn limits</strong><label><input type="checkbox" checked> Use</label></div><p>The runner stops at the configured turn maximum; sub-agents never recurse.</p><small>File reference · src/electron/agent/runner.ts · updated 10/28/2026</small><div class="memory-actions"><button>Edit</button><button class="danger">Delete</button></div></section>
+<section class="memory-item" style="opacity:.6"><div class="memory-item-title"><strong>Old release process</strong><label><input type="checkbox"> Use</label></div><p>Disabled: excluded from future context.</p><small>Your note · updated 9/12/2026</small></div>
+</div></aside>`,{status:'Project memory'}),
+// 5. commands
+commands: shell(editor(), agent(`${user('Run the tests.')}
+<div class="message"><div class="message-label">Agent</div>
+<details class="tool-step"><summary><span>run_diagnostic · test</span><small>Done</small></summary><div class="tool-description">Selected the existing <code>test</code> package script. Ran in the workspace root; exit code 0 in 6.2s.</div><pre># tests 41
+# pass 41
+# fail 0
+# duration_ms 6180</pre></details>
+<section class="approval-inline"><div class="approval-inline-heading"><strong>run command</strong><span>git</span></div><p>Runs an executable directly — no shell. Working directory: workspace root. Stops after 60s or on cancel.</p>
+<details open><summary>Review command</summary><div class="approval-inline-code"><div><strong>Arguments</strong><pre>["commit", "-m", "Add retry to stream request"]</pre></div></div></details>
+<div class="approval-inline-actions"><button>Reject</button><button class="primary">Allow once</button></div></section></div>`),{status:'Waiting for approval'}),
+// 6. git
+git: shell(editor(), agent(`${user('What have I changed so far?')}
+<div class="message"><div class="message-label">Agent</div>
+<details class="tool-step" open><summary><span>git_status</span><small>Done</small></summary><pre class="git-out">branch: master
+staged:    1 file
+unstaged:  2 files
+
+M  src/electron/agent/providers/openai.ts
+ M src/renderer/styles.css
+ M src/renderer/Editor.tsx</pre></details>
+<details class="tool-step" open><summary><span>git_diff · unstaged · Editor.tsx</span><small>Done</small></summary><div class="approval-diff">${diffLines([['diff-file','--- a/src/renderer/Editor.tsx'],['diff-hunk','@@ -36,7 +36,12 @@'],['diff-remove',"-        'editor.background': '#000000',"],['diff-add',"+        'editor.background': '#09090b',"],['diff-add',"+        'editorCursor.foreground': '#f5a742',"]])}</div></details>
+<div class="message-text markdown-body"><p>One staged change in the provider, and two unstaged UI edits. Nothing was modified — these tools are read-only.</p></div></div>`),{status:'Done'}),
+// 7. editor
+editor: shell(`<div class="editor-tabbar"><div class="editor-tab"><span>runner.ts</span></div><div class="editor-tab active"><span>subagents.ts</span><i class="dirty-dot"></i></div><div class="editor-tab"><span>context.ts</span></div></div><div class="ed"><div class="ln">${LN}</div><div class="code">${CODE}</div></div>`,
+`<aside class="agent-pane"><div class="agent-title"><div><strong>Agent</strong></div></div><div class="conversation"><div class="message"><div class="message-label">Save blocked</div><div class="message-text markdown-body"><p><code>subagents.ts</code> changed on disk after you opened it. Saving would overwrite those changes, so it was refused.</p></div></div></div></aside>`,{status:'subagents.ts changed on disk — save refused'}),
+// 8. history
+history: shell(editor(), `<aside class="agent-pane"><div class="agent-title"><div><strong>Agent</strong></div><div class="agent-controls"><button class="icon-button active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2"/></svg></button></div></div><div class="conversation side-list">
+<div class="side-list-title">Recent chats</div>
+<div class="recent-row"><button><strong>Retry the request when the stream drops</strong><span>code-agent · 11/2/2026</span></button></div>
+<div class="recent-row"><button><strong>Where is the token budget enforced?</strong><span>code-agent · 11/2/2026</span></button></div>
+<div class="recent-row"><button><strong>Split App.tsx into components</strong><span>code-agent · 10/30/2026</span></button></div>
+<div class="recent-row"><button><strong>Why does the runner stop early?</strong><span>portfolio · 10/27/2026</span></button></div>
+<div class="side-list-title" style="margin-top:24px">Allowed actions · code-agent</div>
+<div class="permission-row"><span>edit file</span><button class="icon-button">✕</button></div><div class="permission-row"><span>create file</span><button class="icon-button">✕</button></div>
+</div></aside>`,{status:'Chats are saved locally'})
+};
+const out=document.getElementById('out');
+for(const [k,v] of Object.entries(scenes)){const d=document.createElement('div');d.className='scene';d.id=k;d.innerHTML=v;out.appendChild(d)}
+</script></body></html>

@@ -123,27 +123,60 @@ function How() {
 }
 
 const FEATURES = [
-  ['Reviewable diffs', 'Contextual unified diffs for every file mutation, kept in the chat after the action succeeds.'],
-  ['Read-only sub-agents', 'Two or three investigations at once, or a small dependency graph. Isolated context, read and search tools only, one shared token budget.'],
-  ['Visible context', 'A token indicator for the latest request, configurable warning and compaction thresholds, and a list of every excerpt and memory item sent.'],
-  ['Project memory', 'Facts and decisions scoped to a workspace. Edit, disable or delete them; credential-like text is rejected on save.'],
-  ['Approved commands', 'Run an executable with an argument array — no implicit shell — inside the workspace, with timeouts and process-tree cancellation.'],
-  ['Git inspection', 'Structured status and bounded staged or unstaged diffs, available to the agent as read-only tools.'],
-  ['Monaco editor', 'Tabs, unsaved-change prompts, and saves that refuse to overwrite a file that changed on disk.'],
-  ['Local history', 'Chats, permissions and memory live in local app data; each chat remembers its folder.']
+  { title: 'Every edit is a diff you approve', media: 'diff', video: 'clip-diff.mp4', alt: 'An edit_file approval card showing a unified diff with Reject, Allow once and Always allow',
+    text: 'Before any file is written, the chat shows the current file, the proposed file and a contextual unified diff. You choose Reject, Allow once, or Always allow for that action in that folder.',
+    points: ['The diff stays in the conversation after the change lands', 'Always-allow is per action, per folder, and revocable', 'Unsaved editor changes are protected from agent writes'] },
+  { title: 'Read-only sub-agents', media: 'subagents', video: 'clip-subagents.mp4', alt: 'A delegate tool step listing three completed investigations and a token budget',
+    text: 'For two or three independent questions, the agent can fan out bounded investigations at once. Each child has its own context and can only read, search and inspect Git — it cannot edit, run commands, or delegate further.',
+    points: ['Small dependency graphs: ready tasks run together, dependent ones wait', 'One shared token budget per run, shown as it is used', 'Concise reports come back to the parent for synthesis'] },
+  { title: 'Context you can see', media: 'context', alt: 'The Context usage dialog with working budget, warning and compaction thresholds',
+    text: 'A live indicator above the composer shows input tokens for the latest request. Set a working budget and the thresholds at which it warns and the provider compacts the run.',
+    points: ['API-reported counts replace local estimates when they arrive', 'Every file excerpt and memory item sent is listed on the message', 'The budget is a planning preference, not the model limit'] },
+  { title: 'Project memory you control', media: 'memory', alt: 'The Project memory panel with saved facts, each with a Use toggle, Edit and Delete',
+    text: 'Save facts and decisions for a workspace and relevant ones are included in new runs. They live beside, not inside, your chats — so you can correct or remove them without touching history.',
+    points: ['Add, edit, disable or delete any item', 'Credential-looking text is rejected on save', 'Stored locally and unencrypted — keep secrets out'] },
+  { title: 'Commands, without a shell', media: 'commands', alt: 'A run command approval showing the executable and its argument array',
+    text: 'Approved commands run an executable directly with a separate argument array — there is no implicit shell to interpret surprises. Package diagnostics only pick an existing test, lint, check or build script.',
+    points: ['Approval required every time', 'Workspace-contained working directory, bounded streamed output', 'Timeouts and process-tree termination on cancel'] },
+  { title: 'Git, read-only', media: 'git', alt: 'git_status and git_diff tool steps listing staged and unstaged changes',
+    text: 'The agent can see what you have changed without being able to change it. Status is structured, and staged or unstaged diffs are bounded by file, result and size limits.',
+    points: ['Ask “what have I changed?” and get an answer from the real tree', 'Nothing is staged, committed or reset by these tools'] },
+  { title: 'A real editor, careful with your files', media: 'editor', alt: 'The Monaco editor with three tabs and a refused save after an on-disk change',
+    text: 'Monaco handles the editing: tabs, syntax highlighting, and unsaved-change markers. If a file changed on disk since you opened it, saving is refused instead of overwriting the newer version.',
+    points: ['Discard prompts for unsaved tabs', 'Explorer with right-click create, copy path and confirmed delete', 'Resizable, collapsible explorer and agent panes'] },
+  { title: 'History that stays on your machine', media: 'history', alt: 'Recent chats and allowed actions lists',
+    text: 'Chats, allowed actions and project memory are saved in local app data. Each chat remembers its folder, so you can pick a conversation back up where it happened.',
+    points: ['Recent chats list with delete', 'Allowed actions reviewable and revocable per folder', 'The API key is stored encrypted with the OS credential store'] }
 ];
+
+function FeatureRow({ f, i }) {
+  const flip = i % 2 === 1;
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
+  const y = useTransform(scrollYProgress, [0, 1], [40, -40]);
+  return (
+    <div className={`frow ${flip ? 'flip' : ''}`} ref={ref}>
+      <Rise className="ftext">
+        <span className="idx">{String(i + 1).padStart(2, '0')} / {String(FEATURES.length).padStart(2, '0')}</span>
+        <h3>{f.title}</h3>
+        <p className="fp">{f.text}</p>
+        <ul>{f.points.map(p => <li key={p}>{p}</li>)}</ul>
+      </Rise>
+      <motion.div className="fmedia" style={{ y }}>
+        {f.video
+          ? <video src={`media/${f.video}`} poster={`media/f-${f.media}.webp`} autoPlay muted loop playsInline preload="none" aria-label={f.alt} />
+          : <img src={`media/f-${f.media}.webp`} alt={f.alt} loading="lazy" />}
+      </motion.div>
+    </div>
+  );
+}
 
 function Features() {
   return (
-    <section id="features" className="section wrap split">
-      <div className="sticky"><Rise as="h2" className="h2">What is in the box</Rise><Rise delay={0.1} className="lead">Everything runs locally except the model request itself.</Rise></div>
-      <ul className="rows">
-        {FEATURES.map(([t, d], i) => (
-          <motion.li key={t} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-40px' }} transition={{ duration: 0.7, ease }}>
-            <span className="idx">{String(i + 1).padStart(2, '0')}</span><div><h3>{t}</h3><p>{d}</p></div>
-          </motion.li>
-        ))}
-      </ul>
+    <section id="features" className="section wrap">
+      <Rise as="h2" className="h2">What is in the box</Rise>
+      <Rise delay={0.1} className="lead wide">Everything runs locally except the model request itself. Here is each part, in the app.</Rise>
+      <div className="frows">{FEATURES.map((f, i) => <FeatureRow key={f.title} f={f} i={i} />)}</div>
     </section>
   );
 }
