@@ -1,6 +1,8 @@
 {
   "name": "code-agent-site",
+  "main": "worker.js",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./public" },
+  "assets": { "directory": "./public", "run_worker_first": ["/download/*"] },
+  "r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "code-agent-downloads" }],
   "routes": [{ "pattern": "code-agent.sushilbang.com", "custom_domain": true }]
 }

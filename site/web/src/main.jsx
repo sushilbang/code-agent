@@ -4,7 +4,7 @@ import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, 
 import './style.css';
 
 const VERSION = '0.2.0';
-const DOWNLOAD = `https://github.com/sushilbang/code-agent/releases/download/v${VERSION}/Code-Agent-${VERSION}-win-x64.exe`;
+const DOWNLOAD = `/download/Code-Agent-${VERSION}-win-x64.exe`;
 const REPO = 'https://github.com/sushilbang/code-agent';
 const ease = [0.22, 1, 0.36, 1];
 
