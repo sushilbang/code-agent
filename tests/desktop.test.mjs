@@ -477,7 +477,9 @@ test('dependent investigation waits for both reports and skips after failure', a
     const result = JSON.parse(await runReadOnlyInvestigations(root, graph, 'key', 'test-model', new AbortController().signal,
       activity => events.push(activity)));
     assert.equal(peak, 2);
-    assert.deepEqual(seen.map(item => item.id), ['a', 'b', 'c']);
+    const order = seen.map(item => item.id);
+    assert.deepEqual(order.slice(0, 2).sort(), ['a', 'b']);
+    assert.equal(order[2], 'c');
     assert.match(seen[2].content, /a: a report/);
     assert.match(seen[2].content, /b: b report/);
     assert.deepEqual(result.results.map(item => item.status), ['completed', 'completed', 'completed']);
