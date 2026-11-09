@@ -8,10 +8,10 @@ body{background:#000}
 .scene{position:relative;width:1280px;height:720px;overflow:hidden}
 .scene .app-shell{height:720px}
 .ed{flex:1;display:flex;background:var(--bg);font:13px/21px var(--mono);padding:16px 0;overflow:hidden}
-.ln{width:48px;text-align:right;padding-right:18px;color:#4a4a55;white-space:pre}
-.code{white-space:pre;color:#d4d4dc}
-.k{color:#f5a742}.s{color:#7fe3b5}.n{color:#f59a9a}.t{color:#7aa7ff}.c{color:#5f6070;font-style:italic}.f{color:#7fe3b5}
-.hl{background:#f5a74214;box-shadow:inset 2px 0 0 #f5a742;display:inline-block;width:100%}
+.ln{width:48px;text-align:right;padding-right:18px;color:#50546c;white-space:pre}
+.code{white-space:pre;color:#e8e8e8}
+.k{color:#9a85f0}.s{color:#a8c765}.n{color:#b9a9ff}.t{color:#8fa0d8}.c{color:#5c6078;font-style:italic}.f{color:#a8c765}
+.hl{background:#5a41b61f;box-shadow:inset 2px 0 0 #9a85f0;display:inline-block;width:100%}
 .tree-row{pointer-events:none}
 .scene .conversation{padding-top:16px}
 .git-out{font:11px/1.5 var(--mono)}
@@ -105,7 +105,7 @@ unstaged:  2 files
 M  src/electron/agent/providers/openai.ts
  M src/renderer/styles.css
  M src/renderer/Editor.tsx</pre></details>
-<details class="tool-step" open><summary><span>git_diff · unstaged · Editor.tsx</span><small>Done</small></summary><div class="approval-diff">${diffLines([['diff-file','--- a/src/renderer/Editor.tsx'],['diff-hunk','@@ -36,7 +36,12 @@'],['diff-remove',"-        'editor.background': '#000000',"],['diff-add',"+        'editor.background': '#09090b',"],['diff-add',"+        'editorCursor.foreground': '#f5a742',"]])}</div></details>
+<details class="tool-step" open><summary><span>git_diff · unstaged · Editor.tsx</span><small>Done</small></summary><div class="approval-diff">${diffLines([['diff-file','--- a/src/renderer/Editor.tsx'],['diff-hunk','@@ -36,7 +36,12 @@'],['diff-remove',"-        'editor.background': '#09090b',"],['diff-add',"+        'editor.background': '#050506',"],['diff-add',"+        'editorCursor.foreground': '#9a85f0',"]])}</div></details>
 <div class="message-text markdown-body"><p>One staged change in the provider, and two unstaged UI edits. Nothing was modified — these tools are read-only.</p></div></div>`),{status:'Done'}),
 // 7. editor
 editor: shell(`<div class="editor-tabbar"><div class="editor-tab"><span>runner.ts</span></div><div class="editor-tab active"><span>subagents.ts</span><i class="dirty-dot"></i></div><div class="editor-tab"><span>context.ts</span></div></div><div class="ed"><div class="ln">${LN}</div><div class="code">${CODE}</div></div>`,

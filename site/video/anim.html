@@ -7,9 +7,9 @@ html,body{width:1280px;height:720px;margin:0;overflow:hidden;background:#000}
 .scene{position:relative;width:1280px;height:720px;overflow:hidden}
 .scene .app-shell{height:720px}
 .ed{flex:1;display:flex;background:var(--bg);font:13px/21px var(--mono);padding:16px 0;overflow:hidden}
-.ln{width:48px;text-align:right;padding-right:18px;color:#4a4a55;white-space:pre}
-.code{white-space:pre;color:#d4d4dc}
-.k{color:#f5a742}.s{color:#7fe3b5}.n{color:#f59a9a}.t{color:#7aa7ff}.c{color:#5f6070;font-style:italic}.f{color:#7fe3b5}
+.ln{width:48px;text-align:right;padding-right:18px;color:#50546c;white-space:pre}
+.code{white-space:pre;color:#e8e8e8}
+.k{color:#9a85f0}.s{color:#a8c765}.n{color:#b9a9ff}.t{color:#8fa0d8}.c{color:#5c6078;font-style:italic}.f{color:#a8c765}
 .tree-row{pointer-events:none}
 .scene .conversation{padding-top:16px;overflow:hidden}
 .press{background:var(--accent-hover)!important;transform:scale(.96)}
@@ -87,7 +87,7 @@ git:{dur:4.6,html:shell(editor(),agent(`${user('What have I changed so far?',0.2
 <span data-at="1.3">M  src/electron/agent/providers/openai.ts</span>
 <span data-at="1.5"> M src/renderer/styles.css</span>
 <span data-at="1.7"> M src/renderer/Editor.tsx</span></pre></details>
-<details class="tool-step" open data-at="2.1"><summary><span>git_diff · unstaged · Editor.tsx</span><small>Done</small></summary><div class="approval-diff">${dl([['diff-file','--- a/src/renderer/Editor.tsx',2.3],['diff-hunk','@@ -36,7 +36,12 @@',2.5],['diff-remove',"-        'editor.background': '#000000',",2.7],['diff-add',"+        'editor.background': '#09090b',",2.9],['diff-add',"+        'editorCursor.foreground': '#f5a742',",3.1]])}</div></details>
+<details class="tool-step" open data-at="2.1"><summary><span>git_diff · unstaged · Editor.tsx</span><small>Done</small></summary><div class="approval-diff">${dl([['diff-file','--- a/src/renderer/Editor.tsx',2.3],['diff-hunk','@@ -36,7 +36,12 @@',2.5],['diff-remove',"-        'editor.background': '#09090b',",2.7],['diff-add',"+        'editor.background': '#050506',",2.9],['diff-add',"+        'editorCursor.foreground': '#9a85f0',",3.1]])}</div></details>
 <div class="message-text markdown-body" data-at="3.5"><p>One staged change in the provider, and two unstaged UI edits. Nothing was modified — these tools are read-only.</p></div></div>`),'Done'),hook:()=>{}},
 
 editor:{dur:5,html:shell(`<div class="editor-tabbar"><div class="editor-tab"><span>runner.ts</span></div><div class="editor-tab active"><span>subagents.ts</span><i class="dirty-dot" id="dirty" style="display:none"></i></div><div class="editor-tab"><span>context.ts</span></div></div><div class="ed"><div class="ln">${LN}</div><div class="code">${CODE()}</div></div>`,
