@@ -24,7 +24,20 @@ function Video(props) {
   return <video ref={ref} muted loop playsInline preload="metadata" {...props} />;
 }
 
-/* Slow-drifting colour fields with film grain. */
+/* The purple asterisk: the recurring graphic signature of the theme. */
+function Star({ className = '' }) {
+  return (
+    <svg className={`star ${className}`} viewBox="0 0 24 24" aria-hidden="true">
+      {[0, 60, 120].map(r => <rect key={r} x="10.5" y="1" width="3" height="22" rx="1.5" transform={`rotate(${r} 12 12)`} />)}
+    </svg>
+  );
+}
+
+function Tag({ n, children }) {
+  return <p className="tag"><Star />{n && <b>({n})</b>}{children}</p>;
+}
+
+/* Quiet colour fields with film grain. */
 function GradientBg() {
   return (
     <div className="gbg" aria-hidden="true">
@@ -60,10 +73,10 @@ function Hero() {
     <section className="hero" id="top">
       <GradientBg />
       <div className="wrap">
-        <p className="kicker">Desktop app for Windows — v{VERSION}</p>
+        <p className="kicker"><Star />Desktop app for Windows — v{VERSION}</p>
         <h1>
           <span className="line"><span>A coding agent</span></span>
-          <span className="line"><span>you can <em>audit.</em></span></span>
+          <span className="line"><span>you can <em>audit.</em><Star className="big" /></span></span>
         </h1>
         <p className="sub">An editor and an agent in one window. It reads your repository, proposes every change as a diff, and does nothing until you say so.</p>
         <div className="cta">
@@ -86,6 +99,17 @@ function Showcase() {
   );
 }
 
+const MARQUEE = ['Reviewable diffs', 'Approval for every change', 'Read-only sub-agents', 'Project memory', 'Git, read-only', 'Monaco editor', 'Runs locally'];
+
+function Marquee() {
+  const row = MARQUEE.map(t => <span key={t}>{t}<Star /></span>);
+  return (
+    <div className="marquee" aria-hidden="true">
+      <div className="track">{row}{row}</div>
+    </div>
+  );
+}
+
 function Manifesto() {
   return (
     <section className="manifesto wrap">
@@ -103,6 +127,7 @@ const STEPS = [
 function How() {
   return (
     <section id="how" className="section wrap">
+      <Tag n="01">How it works</Tag>
       <h2 className="h2">How an edit happens</h2>
       <div className="steps">
         <div className="rule" aria-hidden="true" />
@@ -163,6 +188,7 @@ function FeatureRow({ f, i }) {
 function Features() {
   return (
     <section id="features" className="section wrap">
+      <Tag n="02">Features</Tag>
       <h2 className="h2">What is in the box</h2>
       <p className="lead wide">Everything runs locally except the model request itself. Here is each part, in the app.</p>
       <div className="frows">{FEATURES.map((f, i) => <FeatureRow key={f.title} f={f} i={i} />)}</div>
@@ -181,6 +207,7 @@ const SAFETY = [
 function Safety() {
   return (
     <section id="safety" className="section wrap">
+      <Tag n="03">Safety</Tag>
       <h2 className="h2">Where the lines are drawn</h2>
       <dl className="spec">
         <div className="rule" aria-hidden="true" />
@@ -195,7 +222,8 @@ function Download() {
     <section id="download" className="dl">
       <GradientBg />
       <div className="wrap dl-in">
-        <h2 className="h2 big">Try it on a repo<br />you care about.</h2>
+        <Tag>Download</Tag>
+        <h2 className="h2 big">Try it on a repo<br />you care about.<Star className="big" /></h2>
         <div className="dl-card">
           <a className="btn solid" href={DOWNLOAD}>Download Code-Agent-{VERSION}.exe <span>↓</span></a>
           <dl className="meta">
@@ -220,7 +248,7 @@ const FAQ = [
 function Faq() {
   return (
     <section id="faq" className="section wrap split">
-      <h2 className="h2">Questions</h2>
+      <div><Tag n="04">FAQ</Tag><h2 className="h2">Questions</h2></div>
       <div className="faq">
         {FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><div className="ans"><p>{a}</p></div></details>)}
       </div>
@@ -252,7 +280,11 @@ function useMotion(root) {
         scrollTrigger: { trigger: '.reveal', start: 'top 80%', end: 'bottom 45%', scrub: true }
       });
 
+      // The asterisks turn as the page scrolls.
+      gsap.to('.star.big', { rotation: 180, ease: 'none', scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: 1 } });
+
       // Section headings and lead text.
+      q('.tag').forEach(t => gsap.from(t, { opacity: 0, y: 14, duration: 0.8, ease: 'expo.out', scrollTrigger: once(t, 'top 90%') }));
       q('.h2').forEach(h => gsap.from(h, { opacity: 0, y: 36, duration: 1, ease: 'expo.out', scrollTrigger: once(h) }));
       q('.lead').forEach(p => gsap.from(p, { opacity: 0, y: 20, duration: 0.9, delay: 0.1, ease: 'expo.out', scrollTrigger: once(p) }));
 
@@ -301,7 +333,7 @@ function App() {
   return (
     <div ref={root}>
       <Nav />
-      <main><Hero /><Showcase /><Manifesto /><How /><Features /><Safety /><Download /><Faq /></main>
+      <main><Hero /><Showcase /><Marquee /><Manifesto /><How /><Features /><Safety /><Download /><Faq /></main>
       <footer className="foot wrap"><span>Code Agent {VERSION}</span><span><a href={REPO}>GitHub</a> · <a href="https://sushilbang.com">sushilbang.com</a></span></footer>
     </div>
   );

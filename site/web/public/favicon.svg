@@ -1,9 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="512" height="512">
-  <rect width="180" height="180" rx="40" fill="#0e0e11"/>
-  <rect x="34" y="52" width="112" height="30" rx="7" fill="#3a1d1d"/>
-  <rect x="34" y="52" width="6" height="30" rx="3" fill="#f27d7d"/>
-  <path d="M58 67H78" stroke="#f27d7d" stroke-width="6" stroke-linecap="round"/>
-  <rect x="34" y="98" width="112" height="30" rx="7" fill="#3a2a10"/>
-  <rect x="34" y="98" width="6" height="30" rx="3" fill="#f5a742"/>
-  <path d="M58 113H78M68 103V123" stroke="#f5a742" stroke-width="6" stroke-linecap="round"/>
+  <rect width="180" height="180" rx="40" fill="#050506"/>
+  <rect x="34" y="52" width="112" height="30" rx="7" fill="#283151"/>
+  <rect x="34" y="52" width="6" height="30" rx="3" fill="#50546c"/>
+  <path d="M58 67H78" stroke="#a7a6af" stroke-width="6" stroke-linecap="round"/>
+  <rect x="34" y="98" width="112" height="30" rx="7" fill="#2a2058"/>
+  <rect x="34" y="98" width="6" height="30" rx="3" fill="#5a41b6"/>
+  <path d="M58 113H78M68 103V123" stroke="#9a85f0" stroke-width="6" stroke-linecap="round"/>
+  <g fill="#b9a9ff" transform="translate(121 113) scale(1.25)">
+    <rect x="-2" y="-9" width="4" height="18" rx="2"/>
+    <rect x="-2" y="-9" width="4" height="18" rx="2" transform="rotate(60)"/>
+    <rect x="-2" y="-9" width="4" height="18" rx="2" transform="rotate(120)"/>
+  </g>
 </svg>
