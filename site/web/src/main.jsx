@@ -8,7 +8,7 @@ gsap.registerPlugin(ScrollTrigger);
 
 const VERSION = '0.2.0';
 const DOWNLOAD = `/download/Code-Agent-${VERSION}-win-x64.exe`;
-const SHA = 'db52ed94103654e6e3a9aca5433584928ed27a7d84f77468e869a2496447afc1';
+const SHA = 'a2b0dbe9c82739bf6459dcb0529610375e75fc935f332d3768d6b81d45c2f875';
 const REPO = 'https://github.com/sushilbang/code-agent';
 
 /* Plays only while on screen, so offscreen videos cost nothing. */
