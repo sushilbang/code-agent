@@ -36,28 +36,28 @@ export default function Editor({ tabs, activePath, onChange }: { tabs: EditorTab
     monaco.editor.defineTheme('code-agent-black', {
       base: 'vs-dark', inherit: true,
       rules: [
-        { token: 'comment', foreground: '5f6070', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'f5a742' },
-        { token: 'string', foreground: '7fe3b5' },
-        { token: 'number', foreground: 'f59a9a' },
-        { token: 'type', foreground: '7aa7ff' }
+        { token: 'comment', foreground: '5c6078', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '9a85f0' },
+        { token: 'string', foreground: 'a8c765' },
+        { token: 'number', foreground: 'b9a9ff' },
+        { token: 'type', foreground: '8fa0d8' }
       ],
       colors: {
-        'editor.background': '#09090b',
-        'editorGutter.background': '#09090b',
-        'editor.lineHighlightBackground': '#111115',
+        'editor.background': '#050506',
+        'editorGutter.background': '#050506',
+        'editor.lineHighlightBackground': '#0b0b10',
         'editor.lineHighlightBorder': '#00000000',
-        'editorLineNumber.foreground': '#4a4a55',
-        'editorLineNumber.activeForeground': '#b4b4c0',
-        'editorCursor.foreground': '#f5a742',
-        'editor.selectionBackground': '#f5a74238',
-        'editor.inactiveSelectionBackground': '#f5a74220',
-        'editorIndentGuide.background1': '#1a1a20',
-        'editorIndentGuide.activeBackground1': '#2d2d37',
-        'editorWidget.background': '#141418',
-        'editorWidget.border': '#2d2d37',
-        'scrollbarSlider.background': '#25252d99',
-        'scrollbarSlider.hoverBackground': '#2d2d37cc'
+        'editorLineNumber.foreground': '#50546c',
+        'editorLineNumber.activeForeground': '#a7a6af',
+        'editorCursor.foreground': '#9a85f0',
+        'editor.selectionBackground': '#5a41b666',
+        'editor.inactiveSelectionBackground': '#5a41b640',
+        'editorIndentGuide.background1': '#1b1c25',
+        'editorIndentGuide.activeBackground1': '#2a2d40',
+        'editorWidget.background': '#12131a',
+        'editorWidget.border': '#2a2d40',
+        'scrollbarSlider.background': '#283151aa',
+        'scrollbarSlider.hoverBackground': '#2a2d40cc'
       }
     });
     editor.current = monaco.editor.create(element.current, {

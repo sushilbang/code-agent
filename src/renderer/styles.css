@@ -1,12 +1,12 @@
 /* Code Agent — dark-only design system.
-   Layered near-black surfaces, one warm amber accent, hairline borders. */
+   Layered near-black surfaces, one violet accent, hairline borders. */
 :root{
   color-scheme:dark;
-  --bg:#09090b;--surface-1:#0e0e11;--surface-2:#141418;--surface-3:#1b1b21;--surface-4:#25252d;
-  --line:#1e1e25;--line-strong:#2d2d37;
-  --text:#ececf0;--text-2:#b4b4c0;--text-3:#7d7d8c;--text-4:#55555f;
-  --accent:#f5a742;--accent-hover:#ffbd66;--accent-soft:#f5a7421f;--accent-line:#f5a74259;--on-accent:#1a1204;
-  --ok:#5fd4a0;--ok-soft:#5fd4a01a;--warn:#e8c46a;--err:#f27d7d;--err-soft:#f27d7d1a;--info:#7aa7ff;
+  --bg:#050506;--surface-1:#0b0b0f;--surface-2:#12131a;--surface-3:#191a24;--surface-4:#252736;
+  --line:#1b1c25;--line-strong:#2a2d40;
+  --text:#e8e8e8;--text-2:#a7a6af;--text-3:#7a7b8e;--text-4:#50546c;
+  --accent:#9a85f0;--accent-hover:#b9a9ff;--accent-soft:#5a41b633;--accent-line:#9a85f066;--on-accent:#0d0820;
+  --ok:#88a742;--ok-soft:#88a7421f;--warn:#e8c46a;--err:#f27d7d;--err-soft:#f27d7d1a;--info:#7aa7ff;
   --radius:8px;--radius-sm:5px;
   --mono:"Cascadia Code","JetBrains Mono",Consolas,monospace;
   font-family:Inter,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;color:var(--text);background:var(--bg);font-synthesis:none;
@@ -20,7 +20,7 @@ button:disabled{cursor:default;opacity:.4}
 ::selection{background:var(--accent-soft);color:#fff}
 :focus-visible{outline:2px solid var(--accent-line);outline-offset:1px}
 *{scrollbar-width:thin;scrollbar-color:var(--surface-4) transparent}
-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%237d7d8c' stroke-width='1.5'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%237a7b8e' stroke-width='1.5'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
 
 .app-shell{height:100%;display:grid;grid-template-rows:52px minmax(0,1fr) 28px;background:var(--bg)}
 .editor-app{grid-template-rows:minmax(0,1fr) 26px}
@@ -84,7 +84,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .reveal-pane{flex:none;margin:8px 6px}
 .reveal-pane.right{margin-left:auto}
 .monaco-host{flex:1;min-height:0;min-width:0;background:var(--bg)}
-.editor-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;color:var(--text-3);min-width:0;background:radial-gradient(60% 50% at 50% 42%,#f5a7420d,transparent 70%),var(--bg)}
+.editor-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;color:var(--text-3);min-width:0;background:radial-gradient(60% 50% at 50% 42%,#5a41b61a,transparent 70%),var(--bg)}
 .editor-empty svg{margin-bottom:10px;color:var(--accent);opacity:.85}
 .editor-empty strong{font-size:17px;font-weight:600;color:var(--text)}
 .editor-empty span{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
@@ -254,7 +254,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .chat-workspace-notice button{align-self:flex-start;border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:5px 10px;background:var(--surface-3);font-size:11px}
 
 /* approvals + diffs */
-.approval-inline{margin:12px 0 16px;padding:13px;border:1px solid var(--accent-line);border-radius:10px;background:linear-gradient(180deg,#f5a74212,transparent 60%),var(--surface-2);min-width:0}
+.approval-inline{margin:12px 0 16px;padding:13px;border:1px solid var(--accent-line);border-radius:10px;background:linear-gradient(180deg,#5a41b61f,transparent 60%),var(--surface-2);min-width:0}
 .approval-inline-heading{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px}
 .approval-inline-heading strong{text-transform:capitalize;color:var(--accent)}
 .approval-inline-heading span{overflow-wrap:anywhere;color:var(--text-2);font-family:var(--mono);font-size:11px}
