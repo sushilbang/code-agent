@@ -11,6 +11,7 @@
     "build:main": "tsc -p tsconfig.electron.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "diff": "^9.0.0",
     "dompurify": "3.4.17",
     "lucide-react": "^0.468.0",

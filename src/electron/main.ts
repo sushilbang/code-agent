@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol, safeStorage } from 'electron';
 import type { AgentApprovalRequest, AgentRequest, ApprovalDecision, ChatRecord, ProjectMemoryInput } from '../shared/types';
 import { isContextSettings } from '../shared/context';
-import { DEFAULT_OPENAI_MODEL, isOpenAIModel } from '../shared/models';
+import { DEFAULT_MODELS, KEY_ENVIRONMENT_VARIABLES, KEY_PROVIDERS, detectKeyProvider, isKeyProvider, isModelFor, isReasoningEffort, type KeyProvider } from '../shared/models';
 import { runAgent, type ApprovalTarget } from './agent';
 import { buildActionDiff } from './actionDiff';
 import { LocalStore } from './storage';
@@ -23,16 +23,24 @@ const actionNames = new Set(['write_file', 'replace_in_file', 'create_file', 'cr
 let store: LocalStore;
 let memoryStore: ProjectMemoryStore;
 
-async function savedOpenAIKey(): Promise<string | null> {
-  const encrypted = await store.getEncryptedOpenAIKey();
+async function savedKey(provider: KeyProvider): Promise<string | null> {
+  const encrypted = await store.getEncryptedKey(provider);
   if (!encrypted) return null;
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this computer.');
   try { return safeStorage.decryptString(Buffer.from(encrypted, 'base64')); }
   catch { throw new Error('The saved API key could not be decrypted. Remove it and save it again.'); }
 }
 
-async function openAIKey(): Promise<string | null> {
-  return await savedOpenAIKey() || process.env.OPENAI_API_KEY?.trim() || null;
+const environmentKey = (provider: KeyProvider) => process.env[KEY_ENVIRONMENT_VARIABLES[provider]]?.trim() || null;
+
+async function providerKey(provider: KeyProvider): Promise<string | null> {
+  return await savedKey(provider) || environmentKey(provider);
+}
+
+async function keyStatus() {
+  const keys = {} as Record<KeyProvider, 'saved' | 'environment' | 'none'>;
+  for (const provider of KEY_PROVIDERS) keys[provider] = await store.getEncryptedKey(provider) ? 'saved' : environmentKey(provider) ? 'environment' : 'none';
+  return { keys, defaultModels: { ...DEFAULT_MODELS, ...(isModelFor('openai', process.env.OPENAI_MODEL) ? { openai: process.env.OPENAI_MODEL } : {}), ...(isModelFor('anthropic', process.env.ANTHROPIC_MODEL) ? { anthropic: process.env.ANTHROPIC_MODEL } : {}) } };
 }
 
 function checkSender(event: Electron.IpcMainInvokeEvent): void {
@@ -272,27 +280,26 @@ ipcMain.handle('memory:delete', async (event, id: unknown) => {
   return result.response === 1 ? memoryStore.delete(root, id) : null;
 });
 
-ipcMain.handle('agent:environment', event => {
-  checkSender(event);
-  return savedOpenAIKey().then(key => ({
-    hasOpenAIKey: Boolean(key || process.env.OPENAI_API_KEY),
-    keySource: key ? 'saved' as const : process.env.OPENAI_API_KEY ? 'environment' as const : 'none' as const,
-    defaultModel: isOpenAIModel(process.env.OPENAI_MODEL) ? process.env.OPENAI_MODEL : DEFAULT_OPENAI_MODEL
-  }));
-});
+ipcMain.handle('agent:environment', event => { checkSender(event); return keyStatus(); });
 
-ipcMain.handle('agent:save-key', async (event, value: unknown) => {
+ipcMain.handle('agent:save-key', async (event, value: unknown, requested: unknown) => {
   checkSender(event);
   if (typeof value !== 'string' || !value.trim() || value.trim().length > 500) throw new Error('Enter a valid API key.');
+  const key = value.trim();
+  // The key's own prefix decides the provider; the requested provider is only used when the prefix is ambiguous.
+  const provider = detectKeyProvider(key) ?? (isKeyProvider(requested) ? requested : null);
+  if (!provider) throw new Error('This key is not recognized. Anthropic keys start with sk-ant- and OpenAI keys start with sk-.');
+  if (isKeyProvider(requested) && detectKeyProvider(key) && detectKeyProvider(key) !== requested) throw new Error(`This looks like an ${detectKeyProvider(key) === 'anthropic' ? 'Anthropic' : 'OpenAI'} key, not an ${requested === 'anthropic' ? 'Anthropic' : 'OpenAI'} key.`);
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this computer.');
-  await store.setEncryptedOpenAIKey(safeStorage.encryptString(value.trim()).toString('base64'));
-  return { hasOpenAIKey: true, keySource: 'saved' as const };
+  await store.setEncryptedKey(provider, safeStorage.encryptString(key).toString('base64'));
+  return { ...await keyStatus(), savedProvider: provider };
 });
 
-ipcMain.handle('agent:delete-key', async event => {
+ipcMain.handle('agent:delete-key', async (event, provider: unknown) => {
   checkSender(event);
-  await store.setEncryptedOpenAIKey(null);
-  return { hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY), keySource: process.env.OPENAI_API_KEY ? 'environment' as const : 'none' as const };
+  if (!isKeyProvider(provider)) throw new Error('Unknown provider.');
+  await store.setEncryptedKey(provider, null);
+  return keyStatus();
 });
 
 ipcMain.handle('agent:context-settings', event => { checkSender(event); return store.getContextSettings(); });
@@ -307,8 +314,9 @@ ipcMain.handle('agent:start', (event, request: AgentRequest) => {
   if (!workspaceRoot) throw new Error('Open a repository first.');
   if (activeRun) throw new Error('An agent response is already running.');
   if (!request || typeof request.runId !== 'string' || typeof request.prompt !== 'string' || !request.prompt.trim() ||
-      (request.provider !== 'local' && request.provider !== 'openai') || typeof request.model !== 'string' ||
-      (request.provider === 'openai' && !isOpenAIModel(request.model)) ||
+      (request.provider !== 'local' && !isKeyProvider(request.provider)) || typeof request.model !== 'string' ||
+      (isKeyProvider(request.provider) && !isModelFor(request.provider, request.model)) ||
+      (request.reasoningEffort !== undefined && !isReasoningEffort(request.reasoningEffort)) ||
       (request.selectedFile !== undefined && typeof request.selectedFile !== 'string') ||
       (request.history !== undefined && (!Array.isArray(request.history) || request.history.length > 12 ||
         request.history.some(item => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || item.content.length > 10000)))) {
@@ -318,7 +326,7 @@ ipcMain.handle('agent:start', (event, request: AgentRequest) => {
   const run = { id: request.runId, controller };
   activeRun = run;
   const root = workspaceRoot;
-  void Promise.all([openAIKey(), store.getContextSettings(), memoryStore.list(root)]).then(([key, contextSettings, memories]) => runAgent(root, request, controller.signal, agentEvent => {
+  void Promise.all([request.provider === 'local' ? Promise.resolve(null) : providerKey(request.provider), store.getContextSettings(), memoryStore.list(root)]).then(([key, contextSettings, memories]) => runAgent(root, request, controller.signal, agentEvent => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', agentEvent);
   }, (change, tool, signal, allowAlways) => requestWriteApproval(request.runId, change, tool, signal, allowAlways), key || undefined, contextSettings, memories)).catch(error => {
     if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('agent:event', { runId: request.runId, type: 'error', message: error instanceof Error ? error.message : String(error) });

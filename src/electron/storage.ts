@@ -122,22 +122,28 @@ export class LocalStore {
     });
   }
 
-  async getEncryptedOpenAIKey(): Promise<string | null> {
+  // Keys are stored encrypted by the caller; the OpenAI field keeps its original name so existing installs keep their key.
+  async getEncryptedKey(provider: 'anthropic' | 'openai'): Promise<string | null> {
     return this.serialized(async () => {
-      const settings = await readJson<{ openAIKey?: unknown }>(path.join(this.directory, 'settings.json'), {});
-      return typeof settings.openAIKey === 'string' && settings.openAIKey ? settings.openAIKey : null;
+      const settings = await readJson<Record<string, unknown>>(path.join(this.directory, 'settings.json'), {});
+      const value = settings[provider === 'openai' ? 'openAIKey' : 'anthropicKey'];
+      return typeof value === 'string' && value ? value : null;
     });
   }
 
-  async setEncryptedOpenAIKey(value: string | null): Promise<void> {
+  async setEncryptedKey(provider: 'anthropic' | 'openai', value: string | null): Promise<void> {
     await this.serialized(async () => {
       const file = path.join(this.directory, 'settings.json');
       const settings = await readJson<Record<string, unknown>>(file, {});
-      if (value) settings.openAIKey = value;
-      else delete settings.openAIKey;
+      const field = provider === 'openai' ? 'openAIKey' : 'anthropicKey';
+      if (value) settings[field] = value;
+      else delete settings[field];
       await writeJson(file, settings);
     });
   }
+
+  getEncryptedOpenAIKey(): Promise<string | null> { return this.getEncryptedKey('openai'); }
+  setEncryptedOpenAIKey(value: string | null): Promise<void> { return this.setEncryptedKey('openai', value); }
 
   async getContextSettings(): Promise<ContextSettings> {
     return this.serialized(async () => {

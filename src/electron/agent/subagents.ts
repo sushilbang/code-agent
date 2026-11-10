@@ -1,6 +1,7 @@
 import { DEFAULT_CONTEXT_SETTINGS, compactionThreshold, estimateRequestTokens, estimateTextTokens } from '../../shared/context';
 import { formatRetrievedContext, retrieveWorkspaceContext, retrievalInstructions } from './retrieval';
-import { requestOpenAITurn } from './providers/openai';
+import { createModelSession, type TurnInput } from './providers/session';
+import { providerForModel } from '../../shared/models';
 import { ToolRegistry } from './tools/registry';
 import { readOnlyFilesystemTools } from './tools/filesystem';
 import { workspaceSearchTools } from './tools/search';
@@ -95,27 +96,27 @@ interface InvestigationResult {
 
 async function investigate(root: string, task: InvestigationTask, prerequisiteReports: string, apiKey: string, model: string, signal: AbortSignal, budget: SubAgentTokenBudget, onBudget: (usage: SubAgentBudgetUsage) => void): Promise<InvestigationResult> {
   const snippets = await retrieveWorkspaceContext(root, task.question, undefined, signal);
-  let input: unknown = [{ role: 'user', content: task.question + prerequisiteReports + formatRetrievedContext(snippets) }];
-  let previousResponseId: string | undefined;
+  let input: TurnInput = { kind: 'user', history: [], text: task.question + prerequisiteReports + formatRetrievedContext(snippets) };
   let answer = '';
   const toolPaths: string[] = [];
   const usage = { inputTokens: 0, outputTokens: 0 };
   let previousTurnTokens = 0;
+  const tools = readOnlyRegistry.definitions();
+  const session = createModelSession(providerForModel(model), {
+    apiKey, model, instructions, tools, signal,
+    compactThreshold: compactionThreshold(DEFAULT_CONTEXT_SETTINGS), maxOutputTokens: 800, reasoningEffort: 'low',
+    onText: text => { answer += text; }, onReasoning: () => undefined
+  });
   for (let turn = 0; turn < maxTurns; turn++) {
     signal.throwIfAborted();
-    const tools = readOnlyRegistry.definitions();
-    const estimatedInput = previousResponseId
+    const estimatedInput = turn > 0
       ? previousTurnTokens + estimateTextTokens(JSON.stringify(input)) + 16
-      : estimateRequestTokens(input, instructions, tools);
+      : estimateRequestTokens(input.kind === 'user' ? [{ role: 'user', content: input.text }] : input, instructions, tools);
     const reserved = budget.reserve(estimatedInput + 800);
     onBudget(budget.snapshot());
     let response;
     try {
-      response = await requestOpenAITurn({
-        apiKey, model, instructions, tools, input, previousResponseId, signal,
-        compactThreshold: compactionThreshold(DEFAULT_CONTEXT_SETTINGS), maxOutputTokens: 800, reasoningEffort: 'low',
-        onText: text => { answer += text; }, onReasoning: () => undefined
-      });
+      response = await session.send(input);
     } catch (error) {
       budget.settle(reserved);
       onBudget(budget.snapshot());
@@ -128,7 +129,6 @@ async function investigate(root: string, task: InvestigationTask, prerequisiteRe
       usage.outputTokens += response.usage.outputTokens;
     }
     previousTurnTokens = response.usage ? response.usage.inputTokens + response.usage.outputTokens : reserved;
-    previousResponseId = response.id;
     if (!response.call) {
       if (!response.hadText) throw new Error('Sub-agent completed without a report.');
       return { id: task.id, dependsOn: task.dependsOn, task: task.question, status: 'completed', answer: answer.trim().slice(0, maxAnswerLength), toolPaths: [...new Set(toolPaths)], usage };
@@ -144,7 +144,7 @@ async function investigate(root: string, task: InvestigationTask, prerequisiteRe
     } catch (error) {
       result = { success: false, content: error instanceof Error ? error.message : String(error) };
     }
-    input = [{ type: 'function_call_output', call_id: response.call.call_id, output: JSON.stringify(result) }];
+    input = { kind: 'tool-result', call_id: response.call.call_id, success: result.success, output: JSON.stringify(result) };
   }
   throw new Error(`Sub-agent exceeded its ${maxTurns}-turn limit.`);
 }

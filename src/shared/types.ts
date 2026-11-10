@@ -120,10 +120,17 @@ export type AgentEvent =
 export interface AgentRequest {
   runId: string;
   prompt: string;
-  provider: 'local' | 'openai';
+  provider: 'local' | 'anthropic' | 'openai';
   model: string;
+  reasoningEffort?: 'low' | 'medium' | 'high';
   selectedFile?: string;
   history?: { role: 'user' | 'assistant'; content: string }[];
+}
+
+export type KeySource = 'saved' | 'environment' | 'none';
+export interface AgentEnvironment {
+  keys: Record<'anthropic' | 'openai', KeySource>;
+  defaultModels: Record<'anthropic' | 'openai', string>;
 }
 
 export interface DesktopApi {
@@ -150,9 +157,9 @@ export interface DesktopApi {
   saveProjectMemory(input: ProjectMemoryInput): Promise<ProjectMemory[]>;
   deleteProjectMemory(id: string): Promise<ProjectMemory[] | null>;
   onMenuCommand(listener: (command: string) => void): () => void;
-  getEnvironment(): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' | 'environment' | 'none'; defaultModel: string }>;
-  saveOpenAIKey(key: string): Promise<{ hasOpenAIKey: boolean; keySource: 'saved' }>;
-  deleteOpenAIKey(): Promise<{ hasOpenAIKey: boolean; keySource: 'environment' | 'none' }>;
+  getEnvironment(): Promise<AgentEnvironment>;
+  saveApiKey(key: string, provider?: 'anthropic' | 'openai'): Promise<AgentEnvironment & { savedProvider: 'anthropic' | 'openai' }>;
+  deleteApiKey(provider: 'anthropic' | 'openai'): Promise<AgentEnvironment>;
   getContextSettings(): Promise<ContextSettings>;
   saveContextSettings(settings: ContextSettings): Promise<ContextSettings>;
 }

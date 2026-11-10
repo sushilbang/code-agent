@@ -1,3 +1,4 @@
+import { supportsReasoning } from '../../../shared/models';
 import { readResponseStream, type OpenAITurnResult } from './openaiStream';
 export { readResponseStream } from './openaiStream';
 
@@ -34,9 +35,10 @@ export async function requestOpenAITurn(options: OpenAITurnOptions): Promise<Ope
   const body: Record<string, unknown> = {
     model: options.model, instructions: options.instructions, tools: options.tools,
     parallel_tool_calls: false, stream: true, store: true,
-    reasoning: { summary: 'auto', ...(options.reasoningEffort ? { effort: options.reasoningEffort } : {}) }, input: options.input,
+    input: options.input,
     context_management: [{ type: 'compaction', compact_threshold: options.compactThreshold }]
   };
+  if (supportsReasoning(options.model)) body.reasoning = { summary: 'auto', ...(options.reasoningEffort ? { effort: options.reasoningEffort } : {}) };
   if (options.maxOutputTokens) body.max_output_tokens = options.maxOutputTokens;
   if (options.previousResponseId) body.previous_response_id = options.previousResponseId;
   const response = await fetch('https://api.openai.com/v1/responses', {
