@@ -26,7 +26,7 @@ function languageFor(file: string): string {
   return ({ ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript', json: 'json', css: 'css', scss: 'scss', html: 'html', htm: 'html', cs: 'csharp', py: 'python', md: 'markdown', yaml: 'yaml', yml: 'yaml', xml: 'xml', sh: 'shell', ps1: 'powershell', sql: 'sql', rs: 'rust', go: 'go' } as Record<string, string>)[extension || ''] || 'plaintext';
 }
 
-export default function Editor({ tabs, activePath, onChange, onCursor }: { tabs: EditorTab[]; activePath: string | null; onChange: (path: string, content: string) => void; onCursor: (info: CursorInfo | null) => void }) {
+export default function Editor({ tabs, activePath, onChange, onCursor, focusToken }: { tabs: EditorTab[]; activePath: string | null; onChange: (path: string, content: string) => void; onCursor: (info: CursorInfo | null) => void; focusToken: number }) {
   const element = useRef<HTMLDivElement>(null);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const models = useRef(new Map<string, monaco.editor.ITextModel>());
@@ -113,6 +113,9 @@ export default function Editor({ tabs, activePath, onChange, onCursor }: { tabs:
     const next = activePath ? models.current.get(activePath) || null : null;
     if (current.getModel() !== next) current.setModel(next);
   }, [tabs, activePath]);
+
+  // Quick Open hands focus back to the editor so typing continues in the file that was just opened.
+  useEffect(() => { if (focusToken > 0 && editor.current?.getModel()) editor.current.focus(); }, [focusToken]);
 
   return <div className="monaco-host" ref={element} style={{ display: activePath ? undefined : 'none' }} />;
 }

@@ -8,6 +8,7 @@ import { DEFAULT_EFFORTS, DEFAULT_MODELS, KEY_PLACEHOLDERS, KEY_PROVIDERS, MODEL
 import type { KeySource } from '../shared/types';
 import Dropdown, { type DropdownGroup } from './components/Dropdown';
 import Editor, { type CursorInfo, type EditorTab } from './Editor';
+import QuickOpen from './components/QuickOpen';
 import ContextControls from './components/agent/ContextControls';
 import ProjectMemoryPanel from './components/agent/ProjectMemoryPanel';
 
@@ -89,6 +90,8 @@ export default function App() {
   const [explorerVisible, setExplorerVisible] = useState(true);
   const [rootOpen, setRootOpen] = useState(true);
   const [cursor, setCursor] = useState<CursorInfo | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [focusToken, setFocusToken] = useState(0);
   const [agentVisible, setAgentVisible] = useState(true);
   const [explorerWidth, setExplorerWidth] = useState(300);
   const [agentWidth, setAgentWidth] = useState(390);
@@ -372,6 +375,7 @@ export default function App() {
       case 'new-folder': beginCreate(true); break;
       case 'save': await saveActive(); break;
       case 'close-editor': if (activePath) await closeTab(activePath); break;
+      case 'quick-open': if (workspace) setQuickOpen(true); else setStatus('Open a folder to search its files'); break;
       case 'toggle-explorer': setExplorerVisible(previous => !previous); break;
       case 'toggle-agent': setAgentVisible(previous => !previous); break;
     }
@@ -430,6 +434,23 @@ export default function App() {
       setRecentChats(await window.codeAgent.listChats());
       if (id === chatId) newChat(false);
     } catch (error) { setStatus(messageOf(error)); }
+  }
+
+  const workspaceFiles = useMemo(() => {
+    const files: string[] = [];
+    // Binary files cannot be opened in the editor, so they are left out of Quick Open.
+    const binary = /\.(png|jpe?g|gif|webp|ico|icns|pak|dll|exe|so|dylib|bin|dat|woff2?|ttf|otf|eot|zip|gz|tgz|7z|rar|mp[34]|webm|mov|pdf|wasm|node|asar|blockmap)$/i;
+    const walk = (nodes: FileNode[]) => { for (const node of nodes) { if (node.directory) walk(node.children || []); else if (!binary.test(node.name)) files.push(node.path); } };
+    if (workspace) walk(workspace.nodes);
+    return files;
+  }, [workspace]);
+
+  async function openQuickOpenFile(file: string) {
+    setQuickOpen(false);
+    const parts = file.split('/');
+    setExpanded(previous => { const next = new Set(previous); for (let index = 1; index < parts.length; index++) next.add(parts.slice(0, index).join('/')); return next; });
+    await openFile({ name: parts.at(-1) || file, path: file, directory: false });
+    setFocusToken(previous => previous + 1);
   }
 
   function selectProvider(next: AgentProvider) {
@@ -511,11 +532,12 @@ export default function App() {
           })}
         </div>}
         {activeTab && <div className="breadcrumbs" aria-label="Breadcrumbs">{crumbs.map((part, index) => <span className="crumb" key={index}>{index > 0 && <ChevronRight size={14} />}{index === crumbs.length - 1 && <FileGlyph name={part} size={14} />}<span>{part}</span></span>)}</div>}
-        <Editor tabs={tabs} activePath={activePath} onChange={editFile} onCursor={setCursor} />
+        <Editor tabs={tabs} activePath={activePath} onChange={editFile} onCursor={setCursor} focusToken={focusToken} />
         {!activeTab && <div className="editor-empty">
           <Code2 size={170} strokeWidth={0.6} className="watermark" />
           <dl className="shortcuts">
             <dt>Open Folder</dt><dd><kbd>Ctrl</kbd> <kbd>O</kbd></dd>
+            <dt>Go to File</dt><dd><kbd>Ctrl</kbd> <kbd>P</kbd></dd>
             <dt>New File</dt><dd><kbd>Ctrl</kbd> <kbd>N</kbd></dd>
             <dt>Toggle Explorer</dt><dd><kbd>Ctrl</kbd> <kbd>B</kbd></dd>
             <dt>Toggle Agent</dt><dd><kbd>Ctrl</kbd> <kbd>J</kbd></dd>
@@ -589,6 +611,7 @@ export default function App() {
         <span className="status-item">UTF-8</span><span className="status-item">{cursor.eol}</span><span className="status-item">{cursor.language}</span>
       </>}</div>
     </footer>
+    {quickOpen && workspace && <QuickOpen files={workspaceFiles} recent={[...new Set([...(activePath ? [activePath] : []), ...tabs.map(tab => tab.path)])]} renderIcon={name => <FileGlyph name={name} />} onOpen={file => void openQuickOpenFile(file)} onClose={() => { setQuickOpen(false); setFocusToken(previous => previous + 1); }} />}
     {keyDialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !keySaving) setKeyDialog(null); }}><form className="create-dialog key-dialog" onSubmit={event => { event.preventDefault(); void saveApiKey(); }}>
       <h2>{KEY_PROVIDERS.every(name => keys[name] === 'none') ? 'Add your API key' : 'API key'}</h2>
       <div className="key-tabs" role="tablist" aria-label="Provider">{KEY_PROVIDERS.map(name => <button type="button" role="tab" aria-selected={keyDialog === name} className={keyDialog === name ? 'active' : ''} key={name} onClick={() => { setKeyDialog(name); setKeyError(''); }}>{PROVIDER_LABELS[name]}{keys[name] !== 'none' && <i className="key-dot" title="Key available" />}</button>)}</div>

@@ -369,3 +369,18 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .key-tabs button.active{background:var(--surface-3);color:#fff}
 .key-dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
 .key-dialog p{white-space:normal;overflow:visible;line-height:1.5}
+
+/* ---- quick open (Ctrl+P) ---- */
+.quickopen-backdrop{position:fixed;inset:0;z-index:50}
+.quickopen{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:min(600px,calc(100% - 32px));display:flex;flex-direction:column;padding:6px 0 0;border:1px solid #454545;border-radius:6px;background:#202020;box-shadow:0 0 8px 2px #000000a8}
+.quickopen>input{margin:0 6px 6px;height:26px;padding:0 6px;border:1px solid var(--accent);border-radius:2px;background:var(--input);outline:none;font-size:13px}
+.quickopen>input::placeholder{color:var(--text-4)}
+.quickopen-list{max-height:min(440px,calc(100vh - 80px));overflow-y:auto;padding-bottom:6px}
+.quickopen-row{height:22px;display:flex;align-items:center;gap:6px;padding:0 12px 0 14px;color:var(--text);font-size:13px;white-space:nowrap;cursor:pointer}
+.quickopen-row.selected{background:var(--list-active);color:#fff}
+.quickopen-name{flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis}
+.quickopen-dir{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text-3);font-size:12px;margin-left:4px}
+.quickopen-row.selected .quickopen-dir{color:#ffffffa6}
+.quickopen-row b{font-weight:700;color:#2aaaff}
+.quickopen-row.selected b{color:#fff}
+.quickopen-empty{padding:6px 14px 8px;color:var(--text-3);font-size:13px}

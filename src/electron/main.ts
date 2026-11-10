@@ -102,6 +102,9 @@ app.whenReady().then(async () => {
       { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
       { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }
     ] },
+    { label: 'Go', submenu: [
+      { label: 'Go to File...', accelerator: 'CmdOrCtrl+P', click: () => command('quick-open') }
+    ] },
     { label: 'View', submenu: [
       { label: 'Toggle Explorer', accelerator: 'CmdOrCtrl+B', click: () => command('toggle-explorer') },
       { label: 'Toggle Agent', accelerator: 'CmdOrCtrl+J', click: () => command('toggle-agent') },
