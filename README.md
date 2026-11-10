@@ -38,6 +38,16 @@ The context indicator above the OpenAI composer shows input tokens for the lates
 
 The same context preferences dialog sets a separate subagent token budget per parent run (20,000 by default). Delegation activity shows current use against the limit. Estimates reserve tokens before concurrent child requests, and API usage replaces them afterward; the limit can be exceeded slightly by a completed response. Delegation also supports small dependency graphs: ready investigations run together, and dependent ones wait for prerequisite reports.
 
+## Code graph
+
+Inspired by Graphify's approach, the agent can navigate a repository as a knowledge graph instead of grepping and reading files. It is implemented natively (no external SDK, no model calls, no files written to your workspace). `graph_overview`, `graph_query`, and `graph_path` build the graph on demand from TypeScript, JavaScript, and Python sources:
+
+- **Nodes** are files, classes, interfaces, types, functions, methods, and top-level constants, each with a file and line.
+- **Edges** are `contains`, `imports` (including re-export chains), `calls`, `uses`, `extends`, and `implements`. Every edge is tagged **EXTRACTED** (stated in source and resolved unambiguously, such as `this.method()` following base classes or a call through an import) or **INFERRED** with a 0 to 1 score (a heuristic match, such as a method name that is unique in the workspace). The agent is instructed to confirm INFERRED links in source.
+- **Communities** of related files come from weighted label propagation over file-level links, with cohesion scores. The overview also lists hub symbols and surprising cross-community couplings.
+
+Extraction is lexical, not a full parser: it reads source as text, never executes it, and skips comments and string contents. Dynamic dispatch and untyped member calls will be missed or inferred. Results are rebuilt from on-disk files on each call (unchanged files reuse cached extraction), limited to 2000 files and 15 seconds. Sub-agents get only `graph_query` to keep their per-request token cost low.
+
 ## Verify
 
 ```powershell

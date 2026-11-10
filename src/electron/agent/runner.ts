@@ -10,6 +10,7 @@ import { requestOpenAITurn } from './providers/openai';
 import { filesystemTools } from './tools/filesystem';
 import { ToolRegistry } from './tools/registry';
 import { workspaceSearchTools } from './tools/search';
+import { graphTools } from './tools/graph';
 import { shellTools } from './tools/shell';
 import { gitInspectionTools } from './tools/git';
 import { diagnosticTools } from './tools/diagnostics';
@@ -17,7 +18,7 @@ import { subagentTools } from './tools/subagents';
 import { runReadOnlyInvestigations, SubAgentTokenBudget } from './subagents';
 import type { ApproveAgentChange } from './tools/types';
 
-const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools, ...subagentTools]);
+const registry = new ToolRegistry([...filesystemTools, ...workspaceSearchTools, ...graphTools, ...gitInspectionTools, ...diagnosticTools, ...shellTools, ...subagentTools]);
 
 export async function runAgent(root: string, request: AgentRequest, signal: AbortSignal, emit: EmitAgentEvent, approveWrite: ApproveAgentChange = async () => false, apiKey?: string, contextSettings: ContextSettings = DEFAULT_CONTEXT_SETTINGS, memories: ProjectMemory[] = []): Promise<void> {
   const send = scopedEmitter(request.runId, emit);

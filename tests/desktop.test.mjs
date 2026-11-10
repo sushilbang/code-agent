@@ -537,7 +537,7 @@ test('parent agent delegates bounded investigations to isolated read-only sub-ag
     assert.ok(parentRequests[0].tools.some(tool => tool.name === 'delegate_investigations'));
     for (const request of childRequests) {
       const names = request.tools.map(tool => tool.name);
-      assert.deepEqual(names, ['list_files', 'read_file', 'glob_files', 'search_text', 'git_status', 'git_diff']);
+      assert.deepEqual(names, ['list_files', 'read_file', 'glob_files', 'search_text', 'graph_query', 'git_status', 'git_diff']);
       assert.equal(names.some(name => ['write_file', 'run_command', 'run_diagnostics', 'delegate_investigations'].includes(name)), false);
       assert.equal(request.max_output_tokens, 800);
       assert.deepEqual(request.reasoning, { summary: 'auto', effort: 'low' });
