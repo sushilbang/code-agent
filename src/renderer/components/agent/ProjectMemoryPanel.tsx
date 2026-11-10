@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Dropdown from '../Dropdown';
 import type { ProjectMemory, ProjectMemoryInput } from '../../../shared/types';
 
 const empty: ProjectMemoryInput = { topic: '', value: '', source: { kind: 'user' }, enabled: true };
@@ -36,7 +37,8 @@ export default function ProjectMemoryPanel({ workspaceRoot }: { workspaceRoot?: 
     {draft && <form className="memory-form" onSubmit={event => { event.preventDefault(); void save(draft); }}>
       <label>Topic<input value={draft.topic} maxLength={80} onChange={event => setDraft({ ...draft, topic: event.target.value })} placeholder="e.g. Testing approach" /></label>
       <label>Fact or decision<textarea value={draft.value} maxLength={1000} onChange={event => setDraft({ ...draft, value: event.target.value })} placeholder="What should the agent remember?" /></label>
-      <label>Source<select value={draft.source.kind} onChange={event => setDraft({ ...draft, source: { kind: event.target.value as 'user' | 'file' } })}><option value="user">My note</option><option value="file">File reference</option></select></label>
+      <div className="memory-field"><span>Source</span><Dropdown variant="field" ariaLabel="Source" value={draft.source.kind} width={250} onSelect={kind => setDraft({ ...draft, source: { kind } })}
+        groups={[{ options: [{ value: 'user', label: 'My note' }, { value: 'file', label: 'File reference' }] }]} /></div>
       <label>Reference {draft.source.kind === 'file' ? '(required)' : '(optional)'}<input value={draft.source.reference || ''} maxLength={300} onChange={event => setDraft({ ...draft, source: { ...draft.source, reference: event.target.value } })} placeholder={draft.source.kind === 'file' ? 'docs/architecture.md' : 'Why this is true'} /></label>
       <label className="memory-check"><input type="checkbox" checked={draft.enabled} onChange={event => setDraft({ ...draft, enabled: event.target.checked })} /> Eligible for agent context</label>
       <div className="memory-actions"><button type="button" onClick={() => setDraft(null)}>Cancel</button><button type="submit" className="primary" disabled={busy || !draft.topic.trim() || !draft.value.trim() || (draft.source.kind === 'file' && !draft.source.reference?.trim())}>Save</button></div>

@@ -123,7 +123,7 @@ app.whenReady().then(async () => {
 
   mainWindow = new BrowserWindow({
     width: 1480, height: 900, minWidth: 1020, minHeight: 620,
-    backgroundColor: '#050506',
+    backgroundColor: '#1f1f1f',
     icon: path.join(__dirname, '../../build/icon.png'),
     title: 'Code Agent',
     webPreferences: {
