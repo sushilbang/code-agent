@@ -2,6 +2,7 @@
   "name": "code-agent-site",
   "private": true,
   "scripts": {
+    "dev": "vite --config web/vite.config.js web",
     "build": "node build.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
