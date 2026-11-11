@@ -2,7 +2,7 @@
   "name": "code-agent-site",
   "private": true,
   "scripts": {
-    "build": "npm ci --prefix web && npm run build --prefix web",
+    "build": "node build.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": { "wrangler": "^4.0.0" }

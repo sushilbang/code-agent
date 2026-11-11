@@ -231,6 +231,7 @@ function Download() {
             <div><dt>Size</dt><dd>115 MB, portable, no installer</dd></div>
             <div><dt>SHA-256</dt><dd className="mono">{SHA}</dd></div>
             <div><dt>Signing</dt><dd>Unsigned — SmartScreen will warn</dd></div>
+            <div><dt>Changes</dt><dd><a href={`${REPO}/blob/master/CHANGELOG.md`}>Changelog</a></dd></div>
           </dl>
         </div>
       </div>
