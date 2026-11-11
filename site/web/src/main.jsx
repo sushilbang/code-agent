@@ -8,7 +8,7 @@ gsap.registerPlugin(ScrollTrigger);
 
 const VERSION = '0.2.0';
 const DOWNLOAD = `/download/Code-Agent-${VERSION}-win-x64.exe`;
-const SHA = 'a2b0dbe9c82739bf6459dcb0529610375e75fc935f332d3768d6b81d45c2f875';
+const SHA = '53b9f19f07503a6b95ead291d95ff97a2ccca76c5dbd0e4e811b8cbf4a098bf1';
 const REPO = 'https://github.com/sushilbang/code-agent';
 
 /* Plays only while on screen, so offscreen videos cost nothing. */
@@ -228,7 +228,7 @@ function Download() {
           <a className="btn solid" href={DOWNLOAD}>Download Code-Agent-{VERSION}.exe <span>↓</span></a>
           <dl className="meta">
             <div><dt>Platform</dt><dd>Windows 10/11, x64</dd></div>
-            <div><dt>Size</dt><dd>114 MB, portable, no installer</dd></div>
+            <div><dt>Size</dt><dd>115 MB, portable, no installer</dd></div>
             <div><dt>SHA-256</dt><dd className="mono">{SHA}</dd></div>
             <div><dt>Signing</dt><dd>Unsigned — SmartScreen will warn</dd></div>
           </dl>
