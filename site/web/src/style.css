@@ -145,6 +145,11 @@ h3{margin:0;font:600 var(--fs-md)/1.25 var(--ui)}
 .foot{display:flex;justify-content:space-between;padding-top:1.875rem;padding-bottom:2.75rem;border-top:1px solid var(--line);color:var(--t3);font:var(--fs-xs)/1.5 var(--mono)}
 .foot a:hover{color:var(--text)}
 
+/* oversized footer wordmark, cropped by the page edge */
+.wordmark{position:relative;overflow:hidden;height:clamp(4.5rem,14.2vw,15rem);margin-top:1rem;user-select:none;pointer-events:none}
+.wordmark span{display:block;text-align:center;white-space:nowrap;font:700 clamp(4rem,20.4vw,22rem)/.9 var(--display);letter-spacing:-.065em;color:var(--navy);
+  background:linear-gradient(180deg,#e8e8e8d9 0%,#9a85f0b3 38%,#5a41b680 70%,#28315122 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
 /* feature rows */
 .lead.wide{max-width:34rem}
 .frows{margin-top:2.5rem}

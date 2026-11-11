@@ -303,6 +303,9 @@ function useMotion(root) {
             { clipPath: 'inset(0% 0% 0% 0% round 12px)', opacity: 1, scale: 1, duration: 1.4 }, 0);
       });
 
+      // Footer wordmark rises into place as the page ends.
+      gsap.from('.wordmark span', { yPercent: 35, opacity: 0, duration: 1.6, ease: 'expo.out', scrollTrigger: once('.wordmark', 'top 95%') });
+
       // Download block.
       gsap.from('.dl-card', { opacity: 0, y: 40, duration: 1.1, ease: 'expo.out', scrollTrigger: once('.dl-card', 'top 88%') });
       gsap.from('.meta > div', { opacity: 0, y: 12, duration: 0.7, stagger: 0.08, ease: 'power3.out', scrollTrigger: once('.dl-card', 'top 80%') });
@@ -336,6 +339,7 @@ function App() {
       <Nav />
       <main><Hero /><Showcase /><Marquee /><Manifesto /><How /><Features /><Safety /><Download /><Faq /></main>
       <footer className="foot wrap"><span>Code Agent {VERSION}</span><span><a href={REPO}>GitHub</a> · <a href="https://sushilbang.com">sushilbang.com</a></span></footer>
+      <div className="wordmark" aria-hidden="true"><span>code-agent</span></div>
     </div>
   );
 }
